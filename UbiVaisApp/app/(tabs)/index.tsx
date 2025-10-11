@@ -10,7 +10,7 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <WorldWave />
-      <Text style={styles.title}>UniVais</Text>
+      <Text style={styles.title}>UbiVais</Text>
       <Text style={styles.subtitle}>Il tuo diario di viaggio personale</Text>
 
       <TouchableOpacity style={styles.button} onPress={handlePress}>

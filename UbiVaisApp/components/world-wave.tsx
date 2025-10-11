@@ -19,8 +19,8 @@ export function WorldWave() {
     <Animated.Text
       style={[
         {
-          fontSize: 28,
-          lineHeight: 32,
+          fontSize: 200,
+          lineHeight: 320,
           marginTop: -6,
         },
         animatedStyle,
