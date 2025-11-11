@@ -2,12 +2,12 @@
 import { auth, db } from '@/config/firebase';
 import { User } from '@/types';
 import {
-    createUserWithEmailAndPassword,
-    User as FirebaseUser,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signOut,
-    updateProfile,
+  createUserWithEmailAndPassword,
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -68,7 +68,8 @@ class AuthService {
     try {
       const userDoc = await getDoc(doc(db, 'users', userId));
       if (userDoc.exists()) {
-        return userDoc.data() as User;
+        const data = userDoc.data();
+        return data as User;
       }
       return null;
     } catch (error) {

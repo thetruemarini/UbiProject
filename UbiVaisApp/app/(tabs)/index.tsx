@@ -1,93 +1,49 @@
-// app/(tabs)/index.tsx - VERSIONE TEST
-import { WorldWave } from "@/components/world-wave";
-import AuthService from "@/services/auth.service";
-import { useState } from "react";
-import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+// app/(tabs)/index.tsx
+import { WorldWave } from '@/components/world-wave';
+import { useAuth } from '@/contexts/auth-context';
+import { router } from 'expo-router';
+import { useEffect } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export default function Index() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const { user, logout } = useAuth();
 
-  const handleSignUp = async () => {
-    if (!email || !password || !username || !displayName) {
-      Alert.alert("Errore", "Compila tutti i campi");
-      return;
+  // Redirect a login se non autenticato
+  useEffect(() => {
+    if (!user) {
+      router.replace('/login');
     }
+  }, [user]);
 
-    const result = await AuthService.signUp(email, password, username, displayName);
-    
-    if (result.success) {
-      Alert.alert("Successo! 🎉", `Benvenuto ${result.user?.displayName}!`);
-    } else {
-      Alert.alert("Errore", result.error);
-    }
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
   };
 
-  const handleSignIn = async () => {
-    if (!email || !password) {
-      Alert.alert("Errore", "Inserisci email e password");
-      return;
-    }
-
-    const result = await AuthService.signIn(email, password);
-    
-    if (result.success) {
-      Alert.alert("Login effettuato! 🚀", `Bentornato ${result.user?.displayName}!`);
-    } else {
-      Alert.alert("Errore", result.error);
-    }
-  };
+  // Se non c'è utente, non mostrare nulla (redirect in corso)
+  if (!user) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
       <WorldWave />
-      <Text style={styles.title}>UbiVais</Text>
-      <Text style={styles.subtitle}>Test Firebase Setup</Text>
+      <Text style={styles.title}>Benvenuto, {user.displayName}! 🎉</Text>
+      <Text style={styles.subtitle}>Il tuo diario di viaggio personale</Text>
 
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholderTextColor="#999"
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput
-          style={styles.input}
-          placeholderTextColor="#999"
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        <TextInput
-          style={styles.input}
-          placeholderTextColor="#999"
-          placeholder="Username"
-          value={username}
-          onChangeText={setUsername}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.input}
-          placeholderTextColor="#999"
-          placeholder="Nome completo"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
-
-        <TouchableOpacity style={styles.button} onPress={handleSignUp}>
-          <Text style={styles.buttonText}>Registrati</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={handleSignIn}>
-          <Text style={styles.buttonText}>Login</Text>
-        </TouchableOpacity>
+      <View style={styles.userInfo}>
+        <Text style={styles.infoText}>📧 {user.email}</Text>
+        <Text style={styles.infoText}>👤 @{user.username}</Text>
+        <Text style={styles.infoText}>✈️ {user.postsCount} viaggi</Text>
       </View>
+
+      <TouchableOpacity style={styles.button}>
+        <Text style={styles.buttonText}>Crea il tuo primo viaggio</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.button, styles.logoutButton]} onPress={handleLogout}>
+        <Text style={styles.buttonText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -95,50 +51,55 @@ export default function Index() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#0d2d52ff",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
     padding: 20,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#ffffffff",
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#2c3e50',
     marginBottom: 10,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: "#008a94ff",
+    color: '#7f8c8d',
     marginBottom: 30,
   },
-  form: {
-    width: "100%",
-    maxWidth: 400,
+  userInfo: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 30,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  input: {
-    backgroundColor: "#fff",
-    color: "#000000ff",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
+  infoText: {
     fontSize: 16,
+    color: '#2c3e50',
+    marginBottom: 8,
   },
   button: {
-    backgroundColor: "#3498db",
+    backgroundColor: '#3498db',
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     borderRadius: 8,
     marginTop: 10,
+    width: '100%',
   },
-  secondaryButton: {
-    backgroundColor: "#2ecc71",
+  logoutButton: {
+    backgroundColor: '#e74c3c',
   },
   buttonText: {
     fontSize: 16,
-    color: "#ffffffff",
-    fontWeight: "bold",
-    textAlign: "center",
+    color: '#ffffff',
+    fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
