@@ -20,6 +20,10 @@ export default function Index() {
     router.replace('/login');
   };
 
+  const handleCreateFirstTrip = () => {
+    router.replace('/create')
+  }
+
   // Se non c'è utente, non mostrare nulla (redirect in corso)
   if (!user) {
     return null;
@@ -32,12 +36,11 @@ export default function Index() {
       <Text style={styles.subtitle}>Il tuo diario di viaggio personale</Text>
 
       <View style={styles.userInfo}>
-        <Text style={styles.infoText}>📧 {user.email}</Text>
-        <Text style={styles.infoText}>👤 @{user.username}</Text>
-        <Text style={styles.infoText}>✈️ {user.postsCount} viaggi</Text>
+        <Text style={styles.infoText}>👤  @{user.username}</Text>
+        <Text style={styles.infoText}>✈️   {user.postsCount} viaggi</Text>
       </View>
 
-      <TouchableOpacity style={styles.button}>
+      <TouchableOpacity style={styles.button} onPress={handleCreateFirstTrip}>
         <Text style={styles.buttonText}>Crea il tuo primo viaggio</Text>
       </TouchableOpacity>
 
@@ -59,7 +62,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#2c3e50',
+    color: '#334d67ff',
     marginBottom: 10,
     textAlign: 'center',
   },
