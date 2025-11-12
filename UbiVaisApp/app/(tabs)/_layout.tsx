@@ -4,7 +4,6 @@ import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
@@ -13,27 +12,39 @@ export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
+        tabBarActiveTintColor: '#FF6B35', // Arancione come nell'immagine
+        tabBarInactiveTintColor: '#999',
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
           height: 90,
-          paddingBottom: 8,
-          paddingTop: 8,
+          paddingBottom: 10,
+          paddingTop: 10,
+          backgroundColor: '#fff',
+          borderTopWidth: 0.5,
+          borderTopColor: '#e0e0e0',
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
         },
       }}>
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 30 : 26} name="house.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="search"
         options={{
-          title: 'Cerca',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="magnifyingglass" color={color} />,
+          title: 'Explore',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 30 : 26} name="magnifyingglass" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -41,22 +52,26 @@ export default function TabLayout() {
         options={{
           title: '',
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={36} name="plus.circle.fill" color={color} />
+            <IconSymbol size={40} name="plus.circle.fill" color="#FF6B35" />
           ),
         }}
       />
       <Tabs.Screen
         name="itineraries"
         options={{
-          title: 'Itinerari',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="map.fill" color={color} />,
+          title: 'Notifications',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 30 : 26} name="bell.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profilo',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="person.fill" color={color} />,
+          title: 'Profile',
+          tabBarIcon: ({ color, focused }) => (
+            <IconSymbol size={focused ? 30 : 26} name="person.fill" color={color} />
+          ),
         }}
       />
     </Tabs>

@@ -13,6 +13,17 @@ export interface User {
   createdAt: Date;
 }
 
+export interface Story {
+  id: string;
+  userId: string;
+  username: string;
+  userAvatar?: string;
+  destination: string;
+  thumbnail: string;
+  viewed: boolean;
+  createdAt: Date;
+}
+
 export interface ItineraryBox {
   id: string;
   title: string;
@@ -34,6 +45,8 @@ export interface ItineraryBox {
 export interface Post {
   id: string;
   userId: string;
+  username: string;
+  userAvatar?: string;
   media: MediaItem[];
   caption: string;
   location?: {
