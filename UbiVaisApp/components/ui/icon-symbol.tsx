@@ -32,6 +32,7 @@ const MAPPING = {
   'bookmark.fill': 'bookmark',
   'paperplane': 'send',
   'ellipsis': 'more-horiz',
+  'map.fill': 'map',
 } as IconMapping;
 
 /**

@@ -2,21 +2,21 @@
 import { db } from '@/config/firebase';
 import { ItineraryBox, Post } from '@/types';
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    increment,
-    limit,
-    orderBy,
-    query,
-    QueryDocumentSnapshot,
-    setDoc,
-    startAfter,
-    Timestamp,
-    updateDoc,
-    where,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  increment,
+  limit,
+  orderBy,
+  query,
+  QueryDocumentSnapshot,
+  setDoc,
+  startAfter,
+  Timestamp,
+  updateDoc,
+  where,
 } from 'firebase/firestore';
 
 class PostService {
@@ -33,27 +33,27 @@ class PostService {
     try {
       const postId = doc(this.postsCollection).id;
 
-      const newPost: Omit<Post, 'id'> = {
+      const newPost: any = {
         userId,
         media: mediaUrls.map((url) => ({
           type: url.includes('.mp4') ? 'video' : 'image',
           url,
         })),
         caption,
-        location,
         itineraryBoxes,
         likesCount: 0,
         commentsCount: 0,
         savesCount: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date()),
       };
 
-      await setDoc(doc(db, 'posts', postId), {
-        ...newPost,
-        createdAt: Timestamp.fromDate(newPost.createdAt),
-        updatedAt: Timestamp.fromDate(newPost.updatedAt),
-      });
+      // Aggiungi location solo se esiste
+      if (location) {
+        newPost.location = location;
+      }
+
+      await setDoc(doc(db, 'posts', postId), newPost);
 
       // Incrementa contatore post utente
       await updateDoc(doc(db, 'users', userId), {

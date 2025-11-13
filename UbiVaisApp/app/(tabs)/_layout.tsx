@@ -59,9 +59,9 @@ export default function TabLayout() {
       <Tabs.Screen
         name="itineraries"
         options={{
-          title: 'Notifications',
+          title: 'Itinerari',
           tabBarIcon: ({ color, focused }) => (
-            <IconSymbol size={focused ? 30 : 26} name="bell.fill" color={color} />
+            <IconSymbol size={focused ? 30 : 26} name="map.fill" color={color} />
           ),
         }}
       />

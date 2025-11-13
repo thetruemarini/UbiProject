@@ -1,115 +1,223 @@
 // app/(tabs)/create.tsx
 import { useAuth } from '@/contexts/auth-context';
-import StorageService from '@/services/storage.service';
+import StorageService from '@/services/cloudinary.service';
+import PostService from '@/services/post.service';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-    Alert,
-    Image,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function CreateScreen() {
   const { user } = useAuth();
   const [selectedMedia, setSelectedMedia] = useState<any[]>([]);
+  const [caption, setCaption] = useState('');
+  const [location, setLocation] = useState('');
   const [uploading, setUploading] = useState(false);
 
   const handlePickMedia = async () => {
-    const result = await StorageService.pickMedia(true, 'all');
+    const result = await StorageService.pickMedia(true, 'images');
     
     if (result.success && result.assets) {
       setSelectedMedia(result.assets);
-    } else if (result.error) {
+    } else if (result.error && result.error !== 'Selezione annullata') {
       Alert.alert('Errore', result.error);
     }
   };
 
-  const handleCreatePost = () => {
+  const handleCreatePost = async () => {
+    if (!user) return;
+
     if (selectedMedia.length === 0) {
-      Alert.alert('Attenzione', 'Seleziona almeno una foto o video');
+      Alert.alert('Attenzione', 'Seleziona almeno una foto');
       return;
     }
 
-    Alert.alert(
-      'Prossimamente! 🚀',
-      'Qui potrai creare il tuo post con foto, descrizione e box attività'
-    );
+    if (!caption.trim()) {
+      Alert.alert('Attenzione', 'Scrivi una descrizione per il tuo post');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      // 1. Upload immagini su Firebase Storage
+      console.log('📤 Upload immagini...');
+      const uris = selectedMedia.map(media => media.uri);
+      const uploadResult = await StorageService.uploadMultipleFiles(uris, user.id);
+
+      if (!uploadResult.success) {
+        Alert.alert('Errore Upload', uploadResult.error || 'Impossibile caricare le immagini');
+        setUploading(false);
+        return;
+      }
+
+      console.log('✅ Immagini caricate:', uploadResult.urls);
+
+      // 2. Crea post su Firestore
+      console.log('💾 Creazione post...');
+      const postResult = await PostService.createPost(
+        user.id,
+        caption.trim(),
+        uploadResult.urls!,
+        [], // itineraryBoxes vuoto per ora
+        location.trim() ? { name: location.trim() } : undefined
+      );
+
+      if (!postResult.success) {
+        Alert.alert('Errore', postResult.error || 'Impossibile creare il post');
+        setUploading(false);
+        return;
+      }
+
+      console.log('✅ Post creato con ID:', postResult.postId);
+
+      // 3. Reset form e torna al feed
+      Alert.alert(
+        'Post pubblicato! 🎉',
+        'Il tuo post è stato pubblicato con successo',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setSelectedMedia([]);
+              setCaption('');
+              setLocation('');
+              router.push('/(tabs)');
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('❌ Errore creazione post:', error);
+      Alert.alert('Errore', 'Si è verificato un errore imprevisto');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeMedia = (index: number) => {
+    setSelectedMedia(selectedMedia.filter((_, i) => i !== index));
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Crea Nuovo Post</Text>
-        <Text style={styles.subtitle}>Condividi il tuo viaggio 🌍</Text>
-      </View>
-
-      <ScrollView style={styles.content}>
-        {selectedMedia.length > 0 ? (
-          <View style={styles.mediaPreview}>
-            <Text style={styles.sectionTitle}>
-              Media selezionati ({selectedMedia.length})
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {selectedMedia.map((media, index) => (
-                <Image
-                  key={index}
-                  source={{ uri: media.uri }}
-                  style={styles.mediaThumbnail}
-                />
-              ))}
-            </ScrollView>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.uploadArea} onPress={handlePickMedia}>
-            <Text style={styles.uploadIcon}>📷</Text>
-            <Text style={styles.uploadText}>Tocca per selezionare foto/video</Text>
-            <Text style={styles.uploadSubtext}>Puoi selezionarne più di uno</Text>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardView}>
+        
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.cancelButton}>Annulla</Text>
           </TouchableOpacity>
-        )}
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📝 Descrizione</Text>
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>Form descrizione in arrivo...</Text>
-          </View>
+          <Text style={styles.title}>Nuovo Post</Text>
+          <TouchableOpacity
+            onPress={handleCreatePost}
+            disabled={uploading || selectedMedia.length === 0 || !caption.trim()}>
+            <Text
+              style={[
+                styles.publishButton,
+                (uploading || selectedMedia.length === 0 || !caption.trim()) &&
+                  styles.publishButtonDisabled,
+              ]}>
+              {uploading ? 'Caricamento...' : 'Pubblica'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📍 Location</Text>
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>Selector location in arrivo...</Text>
-          </View>
-        </View>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Media Selection */}
+          {selectedMedia.length > 0 ? (
+            <View style={styles.mediaPreview}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {selectedMedia.map((media, index) => (
+                  <View key={index} style={styles.mediaContainer}>
+                    <Image source={{ uri: media.uri }} style={styles.mediaThumbnail} />
+                    <TouchableOpacity
+                      style={styles.removeButton}
+                      onPress={() => removeMedia(index)}>
+                      <Text style={styles.removeButtonText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity style={styles.addMoreButton} onPress={handlePickMedia}>
+                  <Text style={styles.addMoreIcon}>+</Text>
+                  <Text style={styles.addMoreText}>Aggiungi</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.uploadArea}
+              onPress={handlePickMedia}
+              disabled={uploading}>
+              <Text style={styles.uploadIcon}>📷</Text>
+              <Text style={styles.uploadText}>Seleziona foto</Text>
+              <Text style={styles.uploadSubtext}>Puoi selezionarne più di una</Text>
+            </TouchableOpacity>
+          )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🗺️ Box Attività</Text>
-          <View style={styles.placeholder}>
-            <Text style={styles.placeholderText}>
-              Qui potrai aggiungere i box con attività del tuo itinerario
+          {/* Caption Input */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>Descrizione *</Text>
+            <TextInput
+              style={styles.captionInput}
+              placeholder="Scrivi una descrizione del tuo viaggio..."
+              placeholderTextColor="#999"
+              value={caption}
+              onChangeText={setCaption}
+              multiline
+              maxLength={2200}
+              editable={!uploading}
+            />
+            <Text style={styles.charCount}>{caption.length}/2200</Text>
+          </View>
+
+          {/* Location Input */}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>📍 Località (opzionale)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Es: Santorini, Greece"
+              placeholderTextColor="#999"
+              value={location}
+              onChangeText={setLocation}
+              editable={!uploading}
+            />
+          </View>
+
+          {/* Coming Soon Section */}
+          <View style={styles.comingSoonSection}>
+            <Text style={styles.comingSoonTitle}>🚀 Prossimamente</Text>
+            <Text style={styles.comingSoonText}>
+              • Box attività per creare itinerari{'\n'}
+              • Selezione location con mappa{'\n'}
+              • Tag di altri utenti{'\n'}
+              • Hashtag suggeriti
             </Text>
           </View>
-        </View>
 
-        {selectedMedia.length > 0 && (
-          <TouchableOpacity style={styles.changeMediaButton} onPress={handlePickMedia}>
-            <Text style={styles.changeMediaText}>Cambia Media</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={[
-            styles.createButton,
-            selectedMedia.length === 0 && styles.createButtonDisabled,
-          ]}
-          onPress={handleCreatePost}
-          disabled={selectedMedia.length === 0}>
-          <Text style={styles.createButtonText}>Pubblica Post</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          {/* Upload Indicator */}
+          {uploading && (
+            <View style={styles.uploadingContainer}>
+              <ActivityIndicator size="large" color="#FF6B35" />
+              <Text style={styles.uploadingText}>Pubblicazione in corso...</Text>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -117,37 +225,49 @@ export default function CreateScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff',
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
     borderBottomColor: '#e0e0e0',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
-  },
-  subtitle: {
+  cancelButton: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: '#000',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  publishButton: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF6B35',
+  },
+  publishButtonDisabled: {
+    color: '#ccc',
   },
   content: {
     flex: 1,
-    padding: 16,
   },
   uploadArea: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: '#3498db',
+    borderColor: '#e0e0e0',
     borderStyle: 'dashed',
     padding: 60,
     alignItems: 'center',
-    marginBottom: 20,
+    margin: 16,
   },
   uploadIcon: {
     fontSize: 48,
@@ -164,61 +284,109 @@ const styles = StyleSheet.create({
     color: '#7f8c8d',
   },
   mediaPreview: {
-    marginBottom: 20,
+    padding: 16,
+  },
+  mediaContainer: {
+    position: 'relative',
+    marginRight: 12,
   },
   mediaThumbnail: {
     width: 120,
-    height: 120,
+    height: 160,
     borderRadius: 8,
-    marginRight: 8,
   },
-  section: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 12,
-  },
-  placeholder: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 30,
+  removeButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  placeholderText: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    textAlign: 'center',
-  },
-  changeMediaButton: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#3498db',
-    padding: 12,
-    marginBottom: 12,
-  },
-  changeMediaText: {
-    color: '#3498db',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  createButton: {
-    backgroundColor: '#3498db',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 40,
-  },
-  createButtonDisabled: {
-    backgroundColor: '#bdc3c7',
-  },
-  createButtonText: {
+  removeButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
-    textAlign: 'center',
   },
-});
+  addMoreButton: {
+    width: 120,
+    height: 160,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addMoreIcon: {
+    fontSize: 32,
+    color: '#999',
+    marginBottom: 8,
+  },
+  addMoreText: {
+    fontSize: 14,
+    color: '#999',
+    fontWeight: '500',
+  },
+  section: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+  },
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 8,
+  },
+  captionInput: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  input: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  comingSoonSection: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#f0f7ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d0e7ff',
+  },
+  comingSoonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 8,
+  },
+  comingSoonText: {
+    fontSize: 14,
+    color: '#666',
+    lineHeight: 22,
+  },
+  uploadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  uploadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+}); 

@@ -1,10 +1,12 @@
 // app/(tabs)/index.tsx
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
+import PostService from '@/services/post.service';
 import { Post, Story } from '@/types';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -18,7 +20,7 @@ import {
 
 const { width } = Dimensions.get('window');
 
-// Mock data - poi sostituiremo con dati reali da Firebase
+// Mock stories - poi sostituiremo anche queste
 const MOCK_STORIES: Story[] = [
   { id: '1', userId: '1', username: 'You', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
   { id: '2', userId: '2', username: 'Swiss Alps', destination: 'Swiss Alps', thumbnail: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7', viewed: false, createdAt: new Date() },
@@ -27,63 +29,118 @@ const MOCK_STORIES: Story[] = [
   { id: '5', userId: '5', username: 'Sahara', destination: 'Sahara', thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35', viewed: false, createdAt: new Date() },
 ];
 
-const MOCK_POSTS: Post[] = [
-  {
-    id: '1',
-    userId: '1',
-    username: 'Wanderlust_Explorer',
-    userAvatar: 'https://i.pravatar.cc/150?img=1',
-    media: [{ type: 'image', url: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19' }],
-    caption: 'Sunset hues over Oia. Can\'t believe this is real! #TravelGreece #IslandLife #SunsetChaser',
-    location: { name: 'Santorini, Greece' },
-    itineraryBoxes: [],
-    likesCount: 1234,
-    commentsCount: 35,
-    savesCount: 89,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-  {
-    id: '2',
-    userId: '2',
-    username: 'MountainMan_Dan',
-    userAvatar: 'https://i.pravatar.cc/150?img=12',
-    media: [{ type: 'image', url: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4' }],
-    caption: 'Moraine Lake never disappoints 🏔️ #BanffNationalPark #CanadianRockies',
-    location: { name: 'Banff, Canada' },
-    itineraryBoxes: [],
-    likesCount: 2156,
-    commentsCount: 67,
-    savesCount: 145,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  },
-];
-
 export default function HomeScreen() {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) {
       router.replace('/login');
+    } else {
+      loadFeed();
     }
   }, [user]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    // Qui caricheremo i post da Firebase
-    setTimeout(() => setRefreshing(false), 1000);
+  const loadFeed = async () => {
+    if (!user) return;
+    
+    console.log('📡 Caricamento feed da Firebase...');
+    setLoading(true);
+    const result = await PostService.getFeed();
+    
+    console.log('📊 Risultato:', result);
+    
+    if (result.success) {
+      console.log('✅ Post caricati:', result.posts.length);
+      setPosts(result.posts);
+      
+      // Carica i like dell'utente
+      const likeChecks = await Promise.all(
+        result.posts.map(post => PostService.hasLiked(post.id, user.id))
+      );
+      const likedSet = new Set<string>();
+      result.posts.forEach((post, index) => {
+        if (likeChecks[index]) {
+          likedSet.add(post.id);
+        }
+      });
+      setLikedPosts(likedSet);
+    } else {
+      console.log('❌ Errore caricamento feed');
+    }
+    
+    setLoading(false);
   };
 
-  const handleLike = (postId: string) => {
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadFeed();
+    setRefreshing(false);
+  };
+
+  const handleLike = async (postId: string) => {
+    if (!user) return;
+
+    const isLiked = likedPosts.has(postId);
+    
+    // Ottimistic update
+    const newLikedPosts = new Set(likedPosts);
+    if (isLiked) {
+      newLikedPosts.delete(postId);
+    } else {
+      newLikedPosts.add(postId);
+    }
+    setLikedPosts(newLikedPosts);
+
+    // Update UI immediatamente
     setPosts(posts.map(p => 
-      p.id === postId ? { ...p, likesCount: p.likesCount + 1 } : p
+      p.id === postId 
+        ? { ...p, likesCount: isLiked ? p.likesCount - 1 : p.likesCount + 1 } 
+        : p
     ));
+
+    // Update su Firebase
+    const result = await PostService.toggleLike(postId, user.id);
+    
+    if (!result.success) {
+      // Rollback in caso di errore
+      if (isLiked) {
+        newLikedPosts.add(postId);
+      } else {
+        newLikedPosts.delete(postId);
+      }
+      setLikedPosts(newLikedPosts);
+      setPosts(posts.map(p => 
+        p.id === postId 
+          ? { ...p, likesCount: isLiked ? p.likesCount + 1 : p.likesCount - 1 } 
+          : p
+      ));
+    }
+  };
+
+  const formatTimeAgo = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return 'just now';
+    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+    if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+    return `${Math.floor(seconds / 604800)} weeks ago`;
   };
 
   if (!user) return null;
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={styles.loadingText}>Caricamento feed...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -91,7 +148,7 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <Text style={styles.logo}>UBIVAIS</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(tabs)/search')}>
             <IconSymbol name="magnifyingglass" size={24} color="#000" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton}>
@@ -127,60 +184,89 @@ export default function HomeScreen() {
             </ScrollView>
           </>
         }
-        renderItem={({ item: post }) => (
-          <View style={styles.postCard}>
-            {/* Post Header */}
-            <View style={styles.postHeader}>
-              <View style={styles.postUser}>
-                <Image source={{ uri: post.userAvatar }} style={styles.userAvatar} />
-                <View>
-                  <Text style={styles.username}>{post.username}</Text>
-                  <Text style={styles.location}>{post.location?.name}</Text>
-                </View>
-              </View>
-              <TouchableOpacity>
-                <IconSymbol name="ellipsis" size={24} color="#000" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Post Image */}
-            <Image source={{ uri: post.media[0].url }} style={styles.postImage} />
-
-            {/* Post Actions */}
-            <View style={styles.postActions}>
-              <View style={styles.leftActions}>
-                <TouchableOpacity onPress={() => handleLike(post.id)} style={styles.actionButton}>
-                  <IconSymbol name="heart" size={28} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <IconSymbol name="message" size={26} color="#000" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <IconSymbol name="paperplane" size={26} color="#000" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity>
-                <IconSymbol name="bookmark" size={26} color="#000" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Post Info */}
-            <View style={styles.postInfo}>
-              <Text style={styles.likes}>Liked by {post.likesCount.toLocaleString()} others</Text>
-              <Text style={styles.caption}>
-                <Text style={styles.captionUsername}>{post.username}</Text> {post.caption}
-              </Text>
-              {post.commentsCount > 0 && (
-                <TouchableOpacity>
-                  <Text style={styles.viewComments}>
-                    View all {post.commentsCount} comments
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <Text style={styles.timestamp}>4 hours ago</Text>
-            </View>
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📸</Text>
+            <Text style={styles.emptyTitle}>Nessun post nel feed</Text>
+            <Text style={styles.emptyText}>
+              Non ci sono ancora post. Crea il primo!
+            </Text>
+            <TouchableOpacity 
+              style={styles.createButton}
+              onPress={() => router.push('/(tabs)/create')}>
+              <Text style={styles.createButtonText}>Crea Post</Text>
+            </TouchableOpacity>
           </View>
-        )}
+        }
+        renderItem={({ item: post }) => {
+          const isLiked = likedPosts.has(post.id);
+          
+          return (
+            <View style={styles.postCard}>
+              {/* Post Header */}
+              <View style={styles.postHeader}>
+                <View style={styles.postUser}>
+                  <Image 
+                    source={{ uri: post.userAvatar || 'https://i.pravatar.cc/150' }} 
+                    style={styles.userAvatar} 
+                  />
+                  <View>
+                    <Text style={styles.username}>{post.username}</Text>
+                    {post.location && (
+                      <Text style={styles.location}>{post.location.name}</Text>
+                    )}
+                  </View>
+                </View>
+                <TouchableOpacity>
+                  <IconSymbol name="ellipsis" size={24} color="#000" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Post Image */}
+              <Image source={{ uri: post.media[0].url }} style={styles.postImage} />
+
+              {/* Post Actions */}
+              <View style={styles.postActions}>
+                <View style={styles.leftActions}>
+                  <TouchableOpacity onPress={() => handleLike(post.id)} style={styles.actionButton}>
+                    <IconSymbol 
+                      name={isLiked ? "heart.fill" : "heart"} 
+                      size={28} 
+                      color={isLiked ? "#FF6B35" : "#000"} 
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <IconSymbol name="message" size={26} color="#000" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton}>
+                    <IconSymbol name="paperplane" size={26} color="#000" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity>
+                  <IconSymbol name="bookmark" size={26} color="#000" />
+                </TouchableOpacity>
+              </View>
+
+              {/* Post Info */}
+              <View style={styles.postInfo}>
+                <Text style={styles.likes}>
+                  Liked by {post.likesCount > 0 ? post.likesCount.toLocaleString() : '0'} {post.likesCount === 1 ? 'person' : 'others'}
+                </Text>
+                <Text style={styles.caption}>
+                  <Text style={styles.captionUsername}>{post.username}</Text> {post.caption}
+                </Text>
+                {post.commentsCount > 0 && (
+                  <TouchableOpacity>
+                    <Text style={styles.viewComments}>
+                      View all {post.commentsCount} comments
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
+              </View>
+            </View>
+          );
+        }}
       />
     </SafeAreaView>
   );
@@ -190,6 +276,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
   },
   header: {
     flexDirection: 'row',
@@ -249,6 +346,39 @@ const styles = StyleSheet.create({
     color: '#000',
     textAlign: 'center',
     maxWidth: 70,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#2c3e50',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 20,
+  },
+  createButton: {
+    backgroundColor: '#FF6B35',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  createButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   postCard: {
     marginBottom: 16,
