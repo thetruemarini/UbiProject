@@ -33,27 +33,31 @@ class PostService {
     try {
       const postId = doc(this.postsCollection).id;
 
-      const newPost: any = {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      const username = userDoc.exists() ? userDoc.data().username : 'Unknown';
+
+      const newPost: Omit<Post, 'id'> = {
         userId,
+        username,
         media: mediaUrls.map((url) => ({
           type: url.includes('.mp4') ? 'video' : 'image',
           url,
         })),
         caption,
+        location,
         itineraryBoxes,
         likesCount: 0,
         commentsCount: 0,
         savesCount: 0,
-        createdAt: Timestamp.fromDate(new Date()),
-        updatedAt: Timestamp.fromDate(new Date()),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
-      // Aggiungi location solo se esiste
-      if (location) {
-        newPost.location = location;
-      }
-
-      await setDoc(doc(db, 'posts', postId), newPost);
+      await setDoc(doc(db, 'posts', postId), {
+        ...newPost,
+        createdAt: Timestamp.fromDate(newPost.createdAt),
+        updatedAt: Timestamp.fromDate(newPost.updatedAt),
+      });
 
       // Incrementa contatore post utente
       await updateDoc(doc(db, 'users', userId), {
@@ -211,6 +215,18 @@ class PostService {
       return { success: true };
     } catch (error: any) {
       console.error('Error deleting post:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async incrementCommentCount(postId: string) {
+    try {
+      await updateDoc(doc(db, 'posts', postId), {
+        commentsCount: increment(1),
+      });
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error incrementing comment count:', error);
       return { success: false, error: error.message };
     }
   }
