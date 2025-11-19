@@ -36,7 +36,8 @@ class PostService {
       const userDoc = await getDoc(doc(db, 'users', userId));
       const username = userDoc.exists() ? userDoc.data().username : 'Unknown';
 
-      const newPost: Omit<Post, 'id'> = {
+      // ✅ SOLUZIONE: Costruisci l'oggetto post dinamicamente
+      const newPost: Partial<Post> = {
         userId,
         username,
         media: mediaUrls.map((url) => ({
@@ -44,7 +45,6 @@ class PostService {
           url,
         })),
         caption,
-        location,
         itineraryBoxes,
         likesCount: 0,
         commentsCount: 0,
@@ -53,11 +53,19 @@ class PostService {
         updatedAt: new Date(),
       };
 
-      await setDoc(doc(db, 'posts', postId), {
+      // ✅ Aggiungi location SOLO se definito
+      if (location && location.name) {
+        newPost.location = location;
+      }
+
+      // ✅ Converti Date in Timestamp per Firebase
+      const postData = {
         ...newPost,
-        createdAt: Timestamp.fromDate(newPost.createdAt),
-        updatedAt: Timestamp.fromDate(newPost.updatedAt),
-      });
+        createdAt: Timestamp.fromDate(newPost.createdAt as Date),
+        updatedAt: Timestamp.fromDate(newPost.updatedAt as Date),
+      };
+
+      await setDoc(doc(db, 'posts', postId), postData);
 
       // Incrementa contatore post utente
       await updateDoc(doc(db, 'users', userId), {

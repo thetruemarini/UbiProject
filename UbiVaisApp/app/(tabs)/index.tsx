@@ -1,10 +1,10 @@
-// app/(tabs)/index.tsx
+// app/(tabs)/index.tsx - REDESIGNED
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
 import { Post, Story } from '@/types';
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -21,12 +21,60 @@ import {
 const { width } = Dimensions.get('window');
 
 const MOCK_STORIES: Story[] = [
-  { id: '1', userId: '1', username: 'You', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
+  { id: '1', userId: '1', username: 'Bali', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
   { id: '2', userId: '2', username: 'Swiss Alps', destination: 'Swiss Alps', thumbnail: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7', viewed: false, createdAt: new Date() },
   { id: '3', userId: '3', username: 'Tokyo', destination: 'Tokyo', thumbnail: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf', viewed: false, createdAt: new Date() },
   { id: '4', userId: '4', username: 'Patagonia', destination: 'Patagonia', thumbnail: 'https://images.unsplash.com/photo-1531545514256-b1400bc00f31', viewed: false, createdAt: new Date() },
   { id: '5', userId: '5', username: 'Sahara', destination: 'Sahara', thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35', viewed: false, createdAt: new Date() },
 ];
+
+// Componente per Gallery di immagini con swipe
+function PostGallery({ media }: { media: Post['media'] }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const handleScroll = (event: any) => {
+    const slideSize = event.nativeEvent.layoutMeasurement.width;
+    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
+    setCurrentIndex(index);
+  };
+
+  return (
+    <View style={styles.galleryContainer}>
+      <ScrollView
+        ref={scrollViewRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}>
+        {media.map((item, index) => (
+          <Image
+            key={index}
+            source={{ uri: item.url }}
+            style={styles.postImage}
+            resizeMode="cover"
+          />
+        ))}
+      </ScrollView>
+
+      {/* Indicatori dots */}
+      {media.length > 1 && (
+        <View style={styles.dotsContainer}>
+          {media.map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.dot,
+                index === currentIndex ? styles.dotActive : styles.dotInactive,
+              ]}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -133,7 +181,12 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.logo}>UBIVAIS</Text>
+        <View style={styles.logoContainer}>
+          <View style={styles.logoIcon}>
+            <Text style={styles.logoEmoji}>🌍</Text>
+          </View>
+          <Text style={styles.logo}>UBIVAIS</Text>
+        </View>
         <View style={styles.headerIcons}>
           <TouchableOpacity style={styles.iconButton} onPress={() => router.push('/(tabs)/search')}>
             <IconSymbol name="magnifyingglass" size={24} color="#000" />
@@ -162,7 +215,7 @@ export default function HomeScreen() {
                   <Image source={{ uri: story.thumbnail }} style={styles.storyImage} />
                 </View>
                 <Text style={styles.storyLabel} numberOfLines={1}>
-                  {story.destination}
+                  {story.username}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -171,14 +224,14 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📸</Text>
-            <Text style={styles.emptyTitle}>Nessun post nel feed</Text>
+            <Text style={styles.emptyTitle}>No posts yet</Text>
             <Text style={styles.emptyText}>
-              Non ci sono ancora post. Crea il primo!
+              Be the first to share your travel story!
             </Text>
             <TouchableOpacity 
               style={styles.createButton}
               onPress={() => router.push('/(tabs)/create')}>
-              <Text style={styles.createButtonText}>Crea Post</Text>
+              <Text style={styles.createButtonText}>Create Post</Text>
             </TouchableOpacity>
           </View>
         }
@@ -186,49 +239,34 @@ export default function HomeScreen() {
           const isLiked = likedPosts.has(post.id);
           
           return (
-            <View style={styles.postContainer}>
-              {/* Post Header */}
+            <View style={styles.postCard}>
+              {/* Post Header - Avatar + Username + Location */}
               <View style={styles.postHeader}>
-                <View style={styles.postUserInfo}>
+                <TouchableOpacity style={styles.userInfo}>
                   <Image 
                     source={{ uri: post.userAvatar || `https://i.pravatar.cc/150?u=${post.userId}` }} 
                     style={styles.userAvatar} 
                   />
-                  <View style={styles.userTextInfo}>
+                  <View style={styles.userTextContainer}>
                     <Text style={styles.username}>{post.username}</Text>
-                    <View style={styles.metaRow}>
-                      {post.location && (
-                        <>
-                          <Text style={styles.location}>{post.location.name}</Text>
-                          <Text style={styles.dotSeparator}> • </Text>
-                        </>
-                      )}
-                      <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
-                    </View>
+                    {post.location && (
+                      <Text style={styles.location}>{post.location.name}</Text>
+                    )}
                   </View>
-                </View>
-                <TouchableOpacity>
-                  <IconSymbol name="ellipsis" size={20} color="#999" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.moreButton}>
+                  <IconSymbol name="ellipsis" size={20} color="#000" />
                 </TouchableOpacity>
               </View>
 
-              {/* Caption */}
-              <TouchableOpacity 
-                activeOpacity={0.9}
-                onPress={() => router.push(`/post/${post.id}`)}>
-                <Text style={styles.caption} numberOfLines={3}>
-                  {post.caption}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Post Image */}
+              {/* Post Gallery */}
               <TouchableOpacity 
                 activeOpacity={0.95}
                 onPress={() => router.push(`/post/${post.id}`)}>
-                <Image source={{ uri: post.media[0].url }} style={styles.postImage} />
+                <PostGallery media={post.media} />
               </TouchableOpacity>
 
-              {/* Actions */}
+              {/* Actions Row */}
               <View style={styles.actionsRow}>
                 <View style={styles.leftActions}>
                   <TouchableOpacity 
@@ -236,36 +274,56 @@ export default function HomeScreen() {
                     style={styles.actionButton}>
                     <IconSymbol 
                       name={isLiked ? "heart.fill" : "heart"} 
-                      size={22} 
+                      size={26} 
                       color={isLiked ? "#FF6B35" : "#000"} 
                     />
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => router.push(`/post/${post.id}`)}>
-                    <IconSymbol name="message" size={21} color="#000" />
+                    <IconSymbol name="message" size={24} color="#000" />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionButton}>
-                    <IconSymbol name="paperplane" size={21} color="#000" />
+                    <IconSymbol name="paperplane" size={24} color="#000" />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity>
-                  <IconSymbol name="bookmark" size={21} color="#000" />
+                  <IconSymbol name="bookmark" size={24} color="#000" />
                 </TouchableOpacity>
               </View>
 
-              {/* Stats */}
-              <View style={styles.statsRow}>
-                <Text style={styles.statsText}>
-                  {post.likesCount > 0 && (
-                    <Text style={styles.statsBold}>{post.likesCount} likes</Text>
-                  )}
-                  {post.likesCount > 0 && post.commentsCount > 0 && ' • '}
-                  {post.commentsCount > 0 && (
-                    <Text style={styles.statsGray}>{post.commentsCount} comments</Text>
-                  )}
+              {/* Likes Count */}
+              {post.likesCount > 0 && (
+                <Text style={styles.likesText}>
+                  Liked by <Text style={styles.likesCount}>
+                    {post.likesCount > 1000 
+                      ? `${(post.likesCount / 1000).toFixed(1)}K` 
+                      : post.likesCount
+                    } others
+                  </Text>
+                </Text>
+              )}
+
+              {/* Caption */}
+              <View style={styles.captionContainer}>
+                <Text style={styles.caption} numberOfLines={3}>
+                  <Text style={styles.captionUsername}>{post.username}</Text>
+                  {' '}
+                  {post.caption}
                 </Text>
               </View>
+
+              {/* View Comments */}
+              {post.commentsCount > 0 && (
+                <TouchableOpacity onPress={() => router.push(`/post/${post.id}`)}>
+                  <Text style={styles.viewComments}>
+                    View all {post.commentsCount} comments
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Timestamp */}
+              <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
             </View>
           );
         }}
@@ -290,15 +348,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 0.5,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fff',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FF6B35',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoEmoji: {
+    fontSize: 18,
   },
   logo: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#000',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
   headerIcons: {
     flexDirection: 'row',
@@ -310,22 +385,24 @@ const styles = StyleSheet.create({
   storiesContainer: {
     borderBottomWidth: 0.5,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fff',
   },
   storiesContent: {
     paddingHorizontal: 12,
-    paddingVertical: 16,
-    gap: 12,
+    paddingVertical: 14,
+    gap: 14,
   },
   storyItem: {
     alignItems: 'center',
-    width: 70,
+    width: 72,
   },
   storyRing: {
     width: 68,
     height: 68,
     borderRadius: 34,
-    padding: 2,
+    padding: 2.5,
     marginBottom: 6,
+    backgroundColor: '#fff',
   },
   storyRingActive: {
     borderWidth: 2.5,
@@ -335,14 +412,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 32,
-    borderWidth: 2,
+    borderWidth: 2.5,
     borderColor: '#fff',
   },
   storyLabel: {
     fontSize: 11,
     color: '#000',
     textAlign: 'center',
-    maxWidth: 70,
+    maxWidth: 72,
   },
   emptyState: {
     alignItems: 'center',
@@ -368,102 +445,131 @@ const styles = StyleSheet.create({
   },
   createButton: {
     backgroundColor: '#FF6B35',
-    borderRadius: 8,
+    borderRadius: 24,
     paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingHorizontal: 32,
   },
   createButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
   },
-  postContainer: {
-    paddingVertical: 12,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#e0e0e0',
+  postCard: {
+    backgroundColor: '#fff',
+    marginBottom: 16,
   },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingHorizontal: 16,
-    marginBottom: 8,
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  postUserInfo: {
+  userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
   userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     marginRight: 10,
+    borderWidth: 0.5,
+    borderColor: '#e0e0e0',
   },
-  userTextInfo: {
+  userTextContainer: {
     flex: 1,
   },
   username: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#000',
-    marginBottom: 2,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 1,
   },
   location: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#666',
   },
-  dotSeparator: {
-    fontSize: 13,
-    color: '#999',
+  moreButton: {
+    padding: 4,
   },
-  timestamp: {
-    fontSize: 13,
-    color: '#999',
-  },
-  caption: {
-    fontSize: 15,
-    color: '#000',
-    lineHeight: 20,
-    paddingHorizontal: 16,
-    marginBottom: 10,
+  galleryContainer: {
+    position: 'relative',
+    backgroundColor: '#f0f0f0',
   },
   postImage: {
     width: width,
-    height: width * 0.8,
+    height: width * 1.25,
     backgroundColor: '#f0f0f0',
-    marginBottom: 8,
+  },
+  dotsContainer: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  dotActive: {
+    backgroundColor: '#FF6B35',
+  },
+  dotInactive: {
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
   },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    marginBottom: 6,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   leftActions: {
     flexDirection: 'row',
-    gap: 16,
+    gap: 14,
   },
   actionButton: {
-    padding: 4,
+    padding: 2,
   },
-  statsRow: {
-    paddingHorizontal: 16,
-  },
-  statsText: {
-    fontSize: 13,
-    color: '#666',
-  },
-  statsBold: {
-    fontWeight: '600',
+  likesText: {
+    paddingHorizontal: 12,
+    fontSize: 14,
     color: '#000',
+    marginBottom: 6,
   },
-  statsGray: {
-    color: '#666',
+  likesCount: {
+    fontWeight: '600',
+  },
+  captionContainer: {
+    paddingHorizontal: 12,
+    marginBottom: 4,
+  },
+  caption: {
+    fontSize: 14,
+    color: '#000',
+    lineHeight: 18,
+  },
+  captionUsername: {
+    fontWeight: '600',
+  },
+  viewComments: {
+    paddingHorizontal: 12,
+    fontSize: 14,
+    color: '#737373',
+    marginBottom: 4,
+  },
+  timestamp: {
+    paddingHorizontal: 12,
+    fontSize: 11,
+    color: '#999',
+    textTransform: 'uppercase',
+    marginBottom: 8,
   },
 });
