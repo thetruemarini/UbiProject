@@ -1,4 +1,9 @@
 // app/(tabs)/index.tsx - FINAL DESIGN
+
+//TODO: Migliorare performance caricamento immagini (caching, lazy loading)
+//TODO: Aggiungere animazioni al like (cuore che si ingrandisce)
+//TODO: Implementare caricamento infinito (infinite scroll)
+
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
@@ -23,7 +28,7 @@ const POST_WIDTH = width - 24; // 12px margin per lato
 const POST_HEIGHT = POST_WIDTH * 1.1; // Aspect ratio ottimizzato
 
 const MOCK_STORIES: Story[] = [
-  { id: '1', userId: '1', username: 'Bali', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
+  { id: '1', userId: '1', username: 'Colombo', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
   { id: '2', userId: '2', username: 'Swiss Alps', destination: 'Swiss Alps', thumbnail: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7', viewed: false, createdAt: new Date() },
   { id: '3', userId: '3', username: 'Tokyo', destination: 'Tokyo', thumbnail: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf', viewed: false, createdAt: new Date() },
   { id: '4', userId: '4', username: 'Patagonia', destination: 'Patagonia', thumbnail: 'https://images.unsplash.com/photo-1531545514256-b1400bc00f31', viewed: false, createdAt: new Date() },
