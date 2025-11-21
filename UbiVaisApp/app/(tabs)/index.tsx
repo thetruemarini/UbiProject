@@ -1,4 +1,4 @@
-// app/(tabs)/index.tsx - REDESIGNED
+// app/(tabs)/index.tsx - FINAL DESIGN
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
@@ -19,6 +19,8 @@ import {
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
+const POST_WIDTH = width - 24; // 12px margin per lato
+const POST_HEIGHT = POST_WIDTH * 1.1; // Aspect ratio ottimizzato
 
 const MOCK_STORIES: Story[] = [
   { id: '1', userId: '1', username: 'Bali', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
@@ -28,8 +30,8 @@ const MOCK_STORIES: Story[] = [
   { id: '5', userId: '5', username: 'Sahara', destination: 'Sahara', thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35', viewed: false, createdAt: new Date() },
 ];
 
-// Componente per Gallery di immagini con swipe
-function PostGallery({ media }: { media: Post['media'] }) {
+// Componente Gallery con Carousel interno
+function PostGallery({ media, postId }: { media: Post['media']; postId: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -47,18 +49,23 @@ function PostGallery({ media }: { media: Post['media'] }) {
         pagingEnabled
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
-        scrollEventThrottle={16}>
+        scrollEventThrottle={16}
+        decelerationRate="fast">
         {media.map((item, index) => (
-          <Image
+          <TouchableOpacity
             key={index}
-            source={{ uri: item.url }}
-            style={styles.postImage}
-            resizeMode="cover"
-          />
+            activeOpacity={0.95}
+            onPress={() => router.push(`/post/${postId}`)}>
+            <Image
+              source={{ uri: item.url }}
+              style={styles.galleryImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Indicatori dots */}
+      {/* Indicatori dots - solo se più di 1 immagine */}
       {media.length > 1 && (
         <View style={styles.dotsContainer}>
           {media.map((_, index) => (
@@ -160,7 +167,7 @@ export default function HomeScreen() {
   const formatTimeAgo = (date: Date) => {
     const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
     
-    if (seconds < 60) return 'just now';
+    if (seconds < 60) return 'now';
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
     if (seconds < 604800) return `${Math.floor(seconds / 86400)}d`;
@@ -203,6 +210,7 @@ export default function HomeScreen() {
         refreshing={refreshing}
         onRefresh={onRefresh}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.feedContent}
         ListHeaderComponent={
           <ScrollView
             horizontal
@@ -240,33 +248,33 @@ export default function HomeScreen() {
           
           return (
             <View style={styles.postCard}>
-              {/* Post Header - Avatar + Username + Location */}
+              {/* Header del Post */}
               <View style={styles.postHeader}>
                 <TouchableOpacity style={styles.userInfo}>
                   <Image 
-                    source={{ uri: post.userAvatar || `https://i.pravatar.cc/150?u=${post.userId}` }} 
+                    source={{ 
+                      uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`
+                    }} 
                     style={styles.userAvatar} 
                   />
                   <View style={styles.userTextContainer}>
                     <Text style={styles.username}>{post.username}</Text>
                     {post.location && (
-                      <Text style={styles.location}>{post.location.name}</Text>
+                      <Text style={styles.location} numberOfLines={1}>
+                        {post.location.name}
+                      </Text>
                     )}
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.moreButton}>
-                  <IconSymbol name="ellipsis" size={20} color="#000" />
+                  <IconSymbol name="ellipsis" size={18} color="#666" />
                 </TouchableOpacity>
               </View>
 
-              {/* Post Gallery */}
-              <TouchableOpacity 
-                activeOpacity={0.95}
-                onPress={() => router.push(`/post/${post.id}`)}>
-                <PostGallery media={post.media} />
-              </TouchableOpacity>
+              {/* Gallery Carousel */}
+              <PostGallery media={post.media} postId={post.id} />
 
-              {/* Actions Row */}
+              {/* Actions */}
               <View style={styles.actionsRow}>
                 <View style={styles.leftActions}>
                   <TouchableOpacity 
@@ -274,50 +282,52 @@ export default function HomeScreen() {
                     style={styles.actionButton}>
                     <IconSymbol 
                       name={isLiked ? "heart.fill" : "heart"} 
-                      size={26} 
-                      color={isLiked ? "#FF6B35" : "#000"} 
+                      size={24} 
+                      color={isLiked ? "#FF6B35" : "#262626"} 
                     />
                   </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.actionButton}
                     onPress={() => router.push(`/post/${post.id}`)}>
-                    <IconSymbol name="message" size={24} color="#000" />
+                    <IconSymbol name="message" size={22} color="#262626" />
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.actionButton}>
-                    <IconSymbol name="paperplane" size={24} color="#000" />
+                    <IconSymbol name="paperplane" size={22} color="#262626" />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity>
-                  <IconSymbol name="bookmark" size={24} color="#000" />
+                  <IconSymbol name="bookmark" size={22} color="#262626" />
                 </TouchableOpacity>
               </View>
 
-              {/* Likes Count */}
+              {/* Likes */}
               {post.likesCount > 0 && (
-                <Text style={styles.likesText}>
-                  Liked by <Text style={styles.likesCount}>
+                <TouchableOpacity style={styles.likesContainer}>
+                  <Text style={styles.likesText}>
                     {post.likesCount > 1000 
                       ? `${(post.likesCount / 1000).toFixed(1)}K` 
                       : post.likesCount
-                    } others
+                    } {post.likesCount === 1 ? 'like' : 'likes'}
                   </Text>
-                </Text>
+                </TouchableOpacity>
               )}
 
               {/* Caption */}
               <View style={styles.captionContainer}>
-                <Text style={styles.caption} numberOfLines={3}>
+                <Text style={styles.caption} numberOfLines={2}>
                   <Text style={styles.captionUsername}>{post.username}</Text>
                   {' '}
-                  {post.caption}
+                  <Text style={styles.captionText}>{post.caption}</Text>
                 </Text>
               </View>
 
-              {/* View Comments */}
+              {/* Comments Link */}
               {post.commentsCount > 0 && (
-                <TouchableOpacity onPress={() => router.push(`/post/${post.id}`)}>
-                  <Text style={styles.viewComments}>
-                    View all {post.commentsCount} comments
+                <TouchableOpacity 
+                  style={styles.commentsLink}
+                  onPress={() => router.push(`/post/${post.id}`)}>
+                  <Text style={styles.commentsLinkText}>
+                    View all {post.commentsCount} comment{post.commentsCount !== 1 ? 's' : ''}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -335,13 +345,13 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#fafafa',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#fafafa',
   },
   header: {
     flexDirection: 'row',
@@ -349,9 +359,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#e0e0e0',
     backgroundColor: '#fff',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#dbdbdb',
   },
   logoContainer: {
     flexDirection: 'row',
@@ -372,7 +382,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#262626',
     letterSpacing: 0.5,
   },
   headerIcons: {
@@ -382,15 +392,19 @@ const styles = StyleSheet.create({
   iconButton: {
     padding: 4,
   },
+  feedContent: {
+    paddingBottom: 20,
+  },
   storiesContainer: {
-    borderBottomWidth: 0.5,
-    borderBottomColor: '#e0e0e0',
     backgroundColor: '#fff',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#dbdbdb',
+    marginBottom: 8,
   },
   storiesContent: {
     paddingHorizontal: 12,
-    paddingVertical: 14,
-    gap: 14,
+    paddingVertical: 12,
+    gap: 12,
   },
   storyItem: {
     alignItems: 'center',
@@ -412,12 +426,12 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     borderRadius: 32,
-    borderWidth: 2.5,
+    borderWidth: 3,
     borderColor: '#fff',
   },
   storyLabel: {
     fontSize: 11,
-    color: '#000',
+    color: '#262626',
     textAlign: 'center',
     maxWidth: 72,
   },
@@ -425,6 +439,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 80,
     paddingHorizontal: 40,
+    backgroundColor: '#fff',
+    marginHorizontal: 12,
+    marginTop: 12,
+    borderRadius: 12,
   },
   emptyIcon: {
     fontSize: 64,
@@ -433,12 +451,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#2c3e50',
+    color: '#262626',
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#7f8c8d',
+    color: '#8e8e8e',
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 20,
@@ -456,14 +474,23 @@ const styles = StyleSheet.create({
   },
   postCard: {
     backgroundColor: '#fff',
-    marginBottom: 16,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   postHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingTop: 12,
+    paddingBottom: 10,
   },
   userInfo: {
     flexDirection: 'row',
@@ -475,8 +502,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     marginRight: 10,
-    borderWidth: 0.5,
-    borderColor: '#e0e0e0',
+    backgroundColor: '#f0f0f0',
   },
   userTextContainer: {
     flex: 1,
@@ -484,33 +510,33 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#000',
-    marginBottom: 1,
+    color: '#262626',
+    marginBottom: 2,
   },
   location: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    color: '#8e8e8e',
   },
   moreButton: {
-    padding: 4,
+    padding: 6,
   },
   galleryContainer: {
     position: 'relative',
+    height: POST_HEIGHT,
     backgroundColor: '#f0f0f0',
   },
-  postImage: {
-    width: width,
-    height: width * 1.25,
-    backgroundColor: '#f0f0f0',
+  galleryImage: {
+    width: POST_WIDTH,
+    height: POST_HEIGHT,
   },
   dotsContainer: {
     position: 'absolute',
-    top: 12,
+    top: 10,
     left: 0,
     right: 0,
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
   },
   dot: {
     width: 6,
@@ -521,55 +547,62 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF6B35',
   },
   dotInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
   },
   actionsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 4,
   },
   leftActions: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
   },
   actionButton: {
     padding: 2,
   },
-  likesText: {
+  likesContainer: {
     paddingHorizontal: 12,
-    fontSize: 14,
-    color: '#000',
-    marginBottom: 6,
+    paddingVertical: 4,
   },
-  likesCount: {
+  likesText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#262626',
   },
   captionContainer: {
     paddingHorizontal: 12,
-    marginBottom: 4,
+    paddingVertical: 4,
   },
   caption: {
     fontSize: 14,
-    color: '#000',
     lineHeight: 18,
+    color: '#262626',
   },
   captionUsername: {
     fontWeight: '600',
   },
-  viewComments: {
+  captionText: {
+    fontWeight: '400',
+  },
+  commentsLink: {
     paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  commentsLinkText: {
     fontSize: 14,
-    color: '#737373',
-    marginBottom: 4,
+    color: '#8e8e8e',
   },
   timestamp: {
     paddingHorizontal: 12,
-    fontSize: 11,
-    color: '#999',
+    paddingTop: 4,
+    paddingBottom: 12,
+    fontSize: 10,
+    color: '#8e8e8e',
     textTransform: 'uppercase',
-    marginBottom: 8,
+    letterSpacing: 0.5,
   },
 });

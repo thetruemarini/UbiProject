@@ -49,6 +49,7 @@ class PostService {
         likesCount: 0,
         commentsCount: 0,
         savesCount: 0,
+        /* userAvatar: userDoc.exists() ? userDoc.data().avatarUrl : null, */
         createdAt: new Date(),
         updatedAt: new Date(),
       };
