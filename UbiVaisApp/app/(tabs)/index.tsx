@@ -1,15 +1,18 @@
-// app/(tabs)/index.tsx - FINAL DESIGN
+// app/(tabs)/index.tsx - FINAL CLEAN VERSION
 
-//TODO: Migliorare performance caricamento immagini (caching, lazy loading)
-//TODO: Aggiungere animazioni al like (cuore che si ingrandisce)
-//TODO: Implementare caricamento infinito (infinite scroll)
+//TODO: Ottimizzare caricamento like con batch
+//TODO: Aggiungere animazioni caricamento post
+//TODO: Migliorare UI/UX stati
+//TODO: togliere il double tap e reinserire il one tap to open post
 
+import { AnimatedPostCard } from '@/components/animated-post-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
 import { Post, Story } from '@/types';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { QueryDocumentSnapshot } from 'firebase/firestore';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
@@ -24,69 +27,15 @@ import {
 } from 'react-native';
 
 const { width } = Dimensions.get('window');
-const POST_WIDTH = width - 24; // 12px margin per lato
-const POST_HEIGHT = POST_WIDTH * 1.1; // Aspect ratio ottimizzato
+const POSTS_PER_PAGE = 5;
 
 const MOCK_STORIES: Story[] = [
-  { id: '1', userId: '1', username: 'Colombo', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
+  { id: '1', userId: '1', username: 'Bali', destination: 'Bali', thumbnail: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4', viewed: false, userAvatar: '', createdAt: new Date() },
   { id: '2', userId: '2', username: 'Swiss Alps', destination: 'Swiss Alps', thumbnail: 'https://images.unsplash.com/photo-1531366936337-7c912a4589a7', viewed: false, createdAt: new Date() },
   { id: '3', userId: '3', username: 'Tokyo', destination: 'Tokyo', thumbnail: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf', viewed: false, createdAt: new Date() },
   { id: '4', userId: '4', username: 'Patagonia', destination: 'Patagonia', thumbnail: 'https://images.unsplash.com/photo-1531545514256-b1400bc00f31', viewed: false, createdAt: new Date() },
   { id: '5', userId: '5', username: 'Sahara', destination: 'Sahara', thumbnail: 'https://images.unsplash.com/photo-1509316785289-025f5b846b35', viewed: false, createdAt: new Date() },
 ];
-
-// Componente Gallery con Carousel interno
-function PostGallery({ media, postId }: { media: Post['media']; postId: string }) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const scrollViewRef = useRef<ScrollView>(null);
-
-  const handleScroll = (event: any) => {
-    const slideSize = event.nativeEvent.layoutMeasurement.width;
-    const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
-    setCurrentIndex(index);
-  };
-
-  return (
-    <View style={styles.galleryContainer}>
-      <ScrollView
-        ref={scrollViewRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        decelerationRate="fast">
-        {media.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            activeOpacity={0.95}
-            onPress={() => router.push(`/post/${postId}`)}>
-            <Image
-              source={{ uri: item.url }}
-              style={styles.galleryImage}
-              resizeMode="cover"
-            />
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Indicatori dots - solo se più di 1 immagine */}
-      {media.length > 1 && (
-        <View style={styles.dotsContainer}>
-          {media.map((_, index) => (
-            <View
-              key={index}
-              style={[
-                styles.dot,
-                index === currentIndex ? styles.dotActive : styles.dotInactive,
-              ]}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
 
 export default function HomeScreen() {
   const { user } = useAuth();
@@ -94,24 +43,37 @@ export default function HomeScreen() {
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Stati per infinite scroll
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const lastDocRef = useRef<QueryDocumentSnapshot | undefined>(undefined);
+  const isLoadingRef = useRef(false);
 
   useEffect(() => {
     if (!user) {
       router.replace('/login');
     } else {
-      loadFeed();
+      loadInitialFeed();
     }
   }, [user]);
 
-  const loadFeed = async () => {
+  // Caricamento iniziale
+  const loadInitialFeed = async () => {
     if (!user) return;
     
     setLoading(true);
-    const result = await PostService.getFeed();
+    setHasMore(true);
+    lastDocRef.current = undefined;
+    
+    const result = await PostService.getFeed(undefined, POSTS_PER_PAGE);
     
     if (result.success) {
       setPosts(result.posts);
+      lastDocRef.current = result.lastDoc;
+      setHasMore(result.posts.length === POSTS_PER_PAGE);
       
+      // Carica stati dei like
       const likeChecks = await Promise.all(
         result.posts.map(post => PostService.hasLiked(post.id, user.id))
       );
@@ -127,11 +89,60 @@ export default function HomeScreen() {
     setLoading(false);
   };
 
+  // Carica più post (infinite scroll)
+  const loadMorePosts = async () => {
+    if (!hasMore || isLoadingRef.current || !user) {
+      return;
+    }
+
+    isLoadingRef.current = true;
+    setLoadingMore(true);
+
+    try {
+      const result = await PostService.getFeed(lastDocRef.current, POSTS_PER_PAGE);
+      
+      if (result.success) {
+        if (result.posts.length > 0) {
+          setPosts(prevPosts => [...prevPosts, ...result.posts]);
+          lastDocRef.current = result.lastDoc;
+          
+          const likeChecks = await Promise.all(
+            result.posts.map(post => PostService.hasLiked(post.id, user.id))
+          );
+          const newLikedPosts = new Set(likedPosts);
+          result.posts.forEach((post, index) => {
+            if (likeChecks[index]) {
+              newLikedPosts.add(post.id);
+            }
+          });
+          setLikedPosts(newLikedPosts);
+          
+          setHasMore(result.posts.length === POSTS_PER_PAGE);
+        } else {
+          setHasMore(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading more posts:', error);
+    } finally {
+      setLoadingMore(false);
+      isLoadingRef.current = false;
+    }
+  };
+
+  // Pull to refresh
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadFeed();
+    await loadInitialFeed();
     setRefreshing(false);
   };
+
+  // Handler per FlatList onEndReached
+  const handleEndReached = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      loadMorePosts();
+    }
+  }, [loadingMore, hasMore]);
 
   const handleLike = async (postId: string) => {
     if (!user) return;
@@ -179,12 +190,38 @@ export default function HomeScreen() {
     return `${Math.floor(seconds / 604800)}w`;
   };
 
+  // Footer component per loading indicator
+  const renderFooter = () => {
+    if (!loadingMore) return null;
+    
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#FF6B35" />
+        <Text style={styles.footerText}>Loading more posts...</Text>
+      </View>
+    );
+  };
+
+  // End message quando non ci sono più post
+  const renderEndMessage = () => {
+    if (loading || loadingMore || hasMore || posts.length === 0) return null;
+    
+    return (
+      <View style={styles.endMessage}>
+        <Text style={styles.endMessageIcon}>✨</Text>
+        <Text style={styles.endMessageText}>You're all caught up!</Text>
+        <Text style={styles.endMessageSubtext}>Check back later for more posts</Text>
+      </View>
+    );
+  };
+
   if (!user) return null;
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6B35" />
+        <Text style={styles.loadingText}>Loading feed...</Text>
       </View>
     );
   }
@@ -216,6 +253,9 @@ export default function HomeScreen() {
         onRefresh={onRefresh}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.feedContent}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
+        
         ListHeaderComponent={
           <ScrollView
             horizontal
@@ -234,6 +274,14 @@ export default function HomeScreen() {
             ))}
           </ScrollView>
         }
+        
+        ListFooterComponent={
+          <>
+            {renderFooter()}
+            {renderEndMessage()}
+          </>
+        }
+        
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>📸</Text>
@@ -248,98 +296,17 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         }
+        
         renderItem={({ item: post }) => {
           const isLiked = likedPosts.has(post.id);
           
           return (
-            <View style={styles.postCard}>
-              {/* Header del Post */}
-              <View style={styles.postHeader}>
-                <TouchableOpacity style={styles.userInfo}>
-                  <Image 
-                    source={{ 
-                      uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`
-                    }} 
-                    style={styles.userAvatar} 
-                  />
-                  <View style={styles.userTextContainer}>
-                    <Text style={styles.username}>{post.username}</Text>
-                    {post.location && (
-                      <Text style={styles.location} numberOfLines={1}>
-                        {post.location.name}
-                      </Text>
-                    )}
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.moreButton}>
-                  <IconSymbol name="ellipsis" size={18} color="#666" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Gallery Carousel */}
-              <PostGallery media={post.media} postId={post.id} />
-
-              {/* Actions */}
-              <View style={styles.actionsRow}>
-                <View style={styles.leftActions}>
-                  <TouchableOpacity 
-                    onPress={() => handleLike(post.id)} 
-                    style={styles.actionButton}>
-                    <IconSymbol 
-                      name={isLiked ? "heart.fill" : "heart"} 
-                      size={24} 
-                      color={isLiked ? "#FF6B35" : "#262626"} 
-                    />
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={styles.actionButton}
-                    onPress={() => router.push(`/post/${post.id}`)}>
-                    <IconSymbol name="message" size={22} color="#262626" />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton}>
-                    <IconSymbol name="paperplane" size={22} color="#262626" />
-                  </TouchableOpacity>
-                </View>
-                <TouchableOpacity>
-                  <IconSymbol name="bookmark" size={22} color="#262626" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Likes */}
-              {post.likesCount > 0 && (
-                <TouchableOpacity style={styles.likesContainer}>
-                  <Text style={styles.likesText}>
-                    {post.likesCount > 1000 
-                      ? `${(post.likesCount / 1000).toFixed(1)}K` 
-                      : post.likesCount
-                    } {post.likesCount === 1 ? 'like' : 'likes'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Caption */}
-              <View style={styles.captionContainer}>
-                <Text style={styles.caption} numberOfLines={2}>
-                  <Text style={styles.captionUsername}>{post.username}</Text>
-                  {' '}
-                  <Text style={styles.captionText}>{post.caption}</Text>
-                </Text>
-              </View>
-
-              {/* Comments Link */}
-              {post.commentsCount > 0 && (
-                <TouchableOpacity 
-                  style={styles.commentsLink}
-                  onPress={() => router.push(`/post/${post.id}`)}>
-                  <Text style={styles.commentsLinkText}>
-                    View all {post.commentsCount} comment{post.commentsCount !== 1 ? 's' : ''}
-                  </Text>
-                </TouchableOpacity>
-              )}
-
-              {/* Timestamp */}
-              <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
-            </View>
+            <AnimatedPostCard
+              post={post}
+              isLiked={isLiked}
+              onLike={() => handleLike(post.id)}
+              formatTimeAgo={formatTimeAgo}
+            />
           );
         }}
       />
@@ -357,6 +324,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#fafafa',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#8e8e8e',
   },
   header: {
     flexDirection: 'row',
@@ -477,137 +449,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  postCard: {
-    backgroundColor: '#fff',
-    marginHorizontal: 12,
+  footerLoader: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerText: {
+    fontSize: 14,
+    color: '#8e8e8e',
+  },
+  endMessage: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    paddingHorizontal: 40,
+  },
+  endMessageIcon: {
+    fontSize: 48,
     marginBottom: 12,
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  postHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 10,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  userAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    marginRight: 10,
-    backgroundColor: '#f0f0f0',
-  },
-  userTextContainer: {
-    flex: 1,
-  },
-  username: {
-    fontSize: 14,
+  endMessageText: {
+    fontSize: 18,
     fontWeight: '600',
     color: '#262626',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  location: {
-    fontSize: 11,
-    color: '#8e8e8e',
-  },
-  moreButton: {
-    padding: 6,
-  },
-  galleryContainer: {
-    position: 'relative',
-    height: POST_HEIGHT,
-    backgroundColor: '#f0f0f0',
-  },
-  galleryImage: {
-    width: POST_WIDTH,
-    height: POST_HEIGHT,
-  },
-  dotsContainer: {
-    position: 'absolute',
-    top: 10,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  dotActive: {
-    backgroundColor: '#FF6B35',
-  },
-  dotInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-  },
-  actionsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 4,
-  },
-  leftActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionButton: {
-    padding: 2,
-  },
-  likesContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  likesText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#262626',
-  },
-  captionContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  caption: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: '#262626',
-  },
-  captionUsername: {
-    fontWeight: '600',
-  },
-  captionText: {
-    fontWeight: '400',
-  },
-  commentsLink: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  commentsLinkText: {
+  endMessageSubtext: {
     fontSize: 14,
     color: '#8e8e8e',
-  },
-  timestamp: {
-    paddingHorizontal: 12,
-    paddingTop: 4,
-    paddingBottom: 12,
-    fontSize: 10,
-    color: '#8e8e8e',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    textAlign: 'center',
   },
 });

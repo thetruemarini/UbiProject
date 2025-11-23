@@ -1,9 +1,10 @@
-// app/post/[id].tsx - WITH KEYBOARD FIX
+// app/post/[id].tsx - FINAL CLEAN VERSION WITH ANIMATIONS
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
 import { Post } from '@/types';
+import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, collection, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore';
 import { useEffect, useRef, useState } from 'react';
@@ -24,6 +25,13 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
 
@@ -36,16 +44,67 @@ interface Comment {
   createdAt: Date;
 }
 
-// Gallery Component per il dettaglio post
-function PostDetailGallery({ media }: { media: Post['media'] }) {
+// Gallery Component con animazioni doppio tap
+function PostDetailGallery({ 
+  media, 
+  onDoubleTap 
+}: { 
+  media: Post['media']; 
+  onDoubleTap?: () => void;
+}) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const lastTap = useRef<number>(0);
+  
+  // Animazione cuore centrale
+  const heartScale = useSharedValue(0);
+  const heartOpacity = useSharedValue(0);
 
   const handleScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
     setCurrentIndex(index);
   };
+
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      // Double tap rilevato!
+      if (onDoubleTap) {
+        onDoubleTap();
+      }
+      
+      // Haptic feedback
+      if (process.env.EXPO_OS === 'ios') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+      
+      // Trigger animazione cuore
+      heartScale.value = 0;
+      heartOpacity.value = 1;
+      
+      heartScale.value = withSpring(1.2, {
+        damping: 8,
+        stiffness: 100,
+      });
+      
+      heartOpacity.value = withDelay(
+        500,
+        withTiming(0, { duration: 400 })
+      );
+    }
+    
+    lastTap.current = now;
+  };
+
+  const animatedHeartStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: heartScale.value }],
+      opacity: heartOpacity.value,
+    };
+  });
 
   return (
     <View style={styles.galleryContainer}>
@@ -57,15 +116,26 @@ function PostDetailGallery({ media }: { media: Post['media'] }) {
         onScroll={handleScroll}
         scrollEventThrottle={16}>
         {media.map((item, index) => (
-          <Image
+          <TouchableWithoutFeedback
             key={index}
-            source={{ uri: item.url }}
-            style={styles.postImage}
-            resizeMode="cover"
-          />
+            onPress={handleDoubleTap}>
+            <View>
+              <Image
+                source={{ uri: item.url }}
+                style={styles.postImage}
+                resizeMode="cover"
+              />
+            </View>
+          </TouchableWithoutFeedback>
         ))}
       </ScrollView>
 
+      {/* Cuore animato centrale */}
+      <Animated.View style={[styles.centerHeart, animatedHeartStyle]} pointerEvents="none">
+        <IconSymbol name="heart.fill" size={120} color="#fff" />
+      </Animated.View>
+
+      {/* Dots indicator */}
       {media.length > 1 && (
         <View style={styles.dotsContainer}>
           {media.map((_, index) => (
@@ -98,7 +168,10 @@ export default function PostDetailScreen() {
 
   useEffect(() => {
     loadPost();
-    loadComments();
+    const unsubscribe = loadComments();
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [id]);
 
   const loadPost = async () => {
@@ -140,11 +213,16 @@ export default function PostDetailScreen() {
       setComments(loadedComments);
     });
 
-    return () => unsubscribe();
+    return unsubscribe;
   };
 
   const handleLike = async () => {
     if (!post || !user) return;
+
+    // Haptic feedback
+    if (process.env.EXPO_OS === 'ios') {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
 
     const newLikedState = !isLiked;
     setIsLiked(newLikedState);
@@ -157,6 +235,12 @@ export default function PostDetailScreen() {
     if (!result.success) {
       setIsLiked(!newLikedState);
       setPost({ ...post, likesCount: post.likesCount });
+    }
+  };
+
+  const handleDoubleTapLike = () => {
+    if (!isLiked && post) {
+      handleLike();
     }
   };
 
@@ -255,8 +339,8 @@ export default function PostDetailScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Post Gallery - Dimensioni Originali */}
-            <PostDetailGallery media={post.media} />
+            {/* Post Gallery - Con animazioni */}
+            <PostDetailGallery media={post.media} onDoubleTap={handleDoubleTapLike} />
 
             {/* Actions */}
             <View style={styles.actions}>
@@ -440,6 +524,21 @@ const styles = StyleSheet.create({
   galleryContainer: {
     position: 'relative',
     backgroundColor: '#000',
+  },
+  centerHeart: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginLeft: -60,
+    marginTop: -60,
+    width: 120,
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
   postImage: {
     width: width,
