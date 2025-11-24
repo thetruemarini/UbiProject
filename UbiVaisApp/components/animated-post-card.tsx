@@ -5,21 +5,19 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
-    Dimensions,
-    Image,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View,
+  Dimensions,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Animated, {
-    useAnimatedStyle,
-    useSharedValue,
-    withDelay,
-    withSpring,
-    withTiming,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
@@ -33,62 +31,22 @@ interface AnimatedPostCardProps {
   formatTimeAgo: (date: Date) => string;
 }
 
-// Gallery Component con Double Tap
+// Gallery Component - ONE TAP per aprire post
 function AnimatedPostGallery({ 
   media, 
-  postId,
-  onDoubleTap 
+  postId
 }: { 
   media: Post['media']; 
   postId: string;
-  onDoubleTap: () => void;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const lastTap = useRef<number>(0);
-  
-  // Animazione cuore centrale
-  const heartScale = useSharedValue(0);
-  const heartOpacity = useSharedValue(0);
 
   const handleScroll = (event: any) => {
     const slideSize = event.nativeEvent.layoutMeasurement.width;
     const index = Math.round(event.nativeEvent.contentOffset.x / slideSize);
     setCurrentIndex(index);
   };
-
-  const handleDoubleTap = () => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-
-    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
-      // Double tap detected!
-      onDoubleTap();
-      
-      // Trigger heart animation
-      heartScale.value = 0;
-      heartOpacity.value = 1;
-      
-      heartScale.value = withSpring(1, {
-        damping: 10,
-        stiffness: 100,
-      });
-      
-      heartOpacity.value = withDelay(
-        400,
-        withTiming(0, { duration: 300 })
-      );
-    }
-    
-    lastTap.current = now;
-  };
-
-  const animatedHeartStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: heartScale.value }],
-      opacity: heartOpacity.value,
-    };
-  });
 
   return (
     <View style={styles.galleryContainer}>
@@ -101,25 +59,18 @@ function AnimatedPostGallery({
         scrollEventThrottle={16}
         decelerationRate="fast">
         {media.map((item, index) => (
-          <TouchableWithoutFeedback
+          <TouchableOpacity
             key={index}
-            onPress={handleDoubleTap}
-            onLongPress={() => router.push(`/post/${postId}`)}>
-            <View>
-              <Image
-                source={{ uri: item.url }}
-                style={styles.galleryImage}
-                resizeMode="cover"
-              />
-            </View>
-          </TouchableWithoutFeedback>
+            activeOpacity={0.98}
+            onPress={() => router.push(`/post/${postId}`)}>
+            <Image
+              source={{ uri: item.url }}
+              style={styles.galleryImage}
+              resizeMode="cover"
+            />
+          </TouchableOpacity>
         ))}
       </ScrollView>
-
-      {/* Cuore animato centrale */}
-      <Animated.View style={[styles.centerHeart, animatedHeartStyle]} pointerEvents="none">
-        <IconSymbol name="heart.fill" size={100} color="#fff" />
-      </Animated.View>
 
       {/* Dots indicator */}
       {media.length > 1 && (
@@ -200,7 +151,7 @@ export function AnimatedPostCard({
   const translateY = useSharedValue(20);
 
   React.useEffect(() => {
-    opacity.value = withTiming(1, { duration: 400 });
+    opacity.value = withTiming(1, { duration: 300 });
     translateY.value = withSpring(0, {
       damping: 15,
       stiffness: 100,
@@ -213,12 +164,6 @@ export function AnimatedPostCard({
       transform: [{ translateY: translateY.value }],
     };
   });
-
-  const handleDoubleTapLike = () => {
-    if (!isLiked) {
-      onLike();
-    }
-  };
 
   return (
     <Animated.View style={[styles.postCard, animatedCardStyle]}>
@@ -245,11 +190,10 @@ export function AnimatedPostCard({
         </TouchableOpacity>
       </View>
 
-      {/* Gallery Carousel con Double Tap */}
+      {/* Gallery Carousel - ONE TAP per aprire */}
       <AnimatedPostGallery 
         media={post.media} 
         postId={post.id}
-        onDoubleTap={handleDoubleTapLike}
       />
 
       {/* Actions */}

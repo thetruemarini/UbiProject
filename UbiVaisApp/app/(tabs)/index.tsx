@@ -1,11 +1,16 @@
-// app/(tabs)/index.tsx - FINAL CLEAN VERSION
+// app/(tabs)/index.tsx - OPTIMIZED VERSION
 
-//TODO: Ottimizzare caricamento like con batch
-//TODO: Aggiungere animazioni caricamento post
-//TODO: Migliorare UI/UX stati
-//TODO: togliere il double tap e reinserire il one tap to open post
+//TODO : Implementare batch checking dei likes per migliorare le performance
+//TODO: Implementare caricamento più fluido con placeholder durante l'infinite scroll
+//TODO: Aggiungere messaggio di fine feed quando non ci sono più post da caricare
+//TODO: introdurre click to profile quando premuto il nome utente di un utente 
+//TODO: rendere l'immagine avatar l'effettiva immagine utente
+//TODO: rendere il post modificabile ed eliminabile da parte dell'utente che l'ha creato ( tramite i tre puntini del post nella home)
+//TODO: ottimizzare le immagini caricate con compressione e resizing
+//TODO: rendere funzionanti i collegamenti ai post nell'area il mio profilo 
 
 import { AnimatedPostCard } from '@/components/animated-post-card';
+import { SkeletonFeed, SkeletonStories } from '@/components/skeleton-loader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
@@ -58,7 +63,7 @@ export default function HomeScreen() {
     }
   }, [user]);
 
-  // Caricamento iniziale
+  // Caricamento iniziale con batch likes
   const loadInitialFeed = async () => {
     if (!user) return;
     
@@ -68,19 +73,19 @@ export default function HomeScreen() {
     
     const result = await PostService.getFeed(undefined, POSTS_PER_PAGE);
     
-    if (result.success) {
+    if (result.success && result.posts.length > 0) {
       setPosts(result.posts);
       lastDocRef.current = result.lastDoc;
       setHasMore(result.posts.length === POSTS_PER_PAGE);
       
-      // Carica stati dei like
-      const likeChecks = await Promise.all(
-        result.posts.map(post => PostService.hasLiked(post.id, user.id))
-      );
+      // ✅ OTTIMIZZATO: Batch check likes
+      const postIds = result.posts.map(post => post.id);
+      const likesMap = await PostService.batchCheckLikes(postIds, user.id);
+      
       const likedSet = new Set<string>();
-      result.posts.forEach((post, index) => {
-        if (likeChecks[index]) {
-          likedSet.add(post.id);
+      likesMap.forEach((isLiked, postId) => {
+        if (isLiked) {
+          likedSet.add(postId);
         }
       });
       setLikedPosts(likedSet);
@@ -89,7 +94,7 @@ export default function HomeScreen() {
     setLoading(false);
   };
 
-  // Carica più post (infinite scroll)
+  // Carica più post (infinite scroll) con batch likes
   const loadMorePosts = async () => {
     if (!hasMore || isLoadingRef.current || !user) {
       return;
@@ -101,26 +106,25 @@ export default function HomeScreen() {
     try {
       const result = await PostService.getFeed(lastDocRef.current, POSTS_PER_PAGE);
       
-      if (result.success) {
-        if (result.posts.length > 0) {
-          setPosts(prevPosts => [...prevPosts, ...result.posts]);
-          lastDocRef.current = result.lastDoc;
-          
-          const likeChecks = await Promise.all(
-            result.posts.map(post => PostService.hasLiked(post.id, user.id))
-          );
-          const newLikedPosts = new Set(likedPosts);
-          result.posts.forEach((post, index) => {
-            if (likeChecks[index]) {
-              newLikedPosts.add(post.id);
-            }
-          });
-          setLikedPosts(newLikedPosts);
-          
-          setHasMore(result.posts.length === POSTS_PER_PAGE);
-        } else {
-          setHasMore(false);
-        }
+      if (result.success && result.posts.length > 0) {
+        setPosts(prevPosts => [...prevPosts, ...result.posts]);
+        lastDocRef.current = result.lastDoc;
+        
+        // ✅ OTTIMIZZATO: Batch check likes
+        const postIds = result.posts.map(post => post.id);
+        const likesMap = await PostService.batchCheckLikes(postIds, user.id);
+        
+        const newLikedPosts = new Set(likedPosts);
+        likesMap.forEach((isLiked, postId) => {
+          if (isLiked) {
+            newLikedPosts.add(postId);
+          }
+        });
+        setLikedPosts(newLikedPosts);
+        
+        setHasMore(result.posts.length === POSTS_PER_PAGE);
+      } else {
+        setHasMore(false);
       }
     } catch (error) {
       console.error('Error loading more posts:', error);
@@ -219,10 +223,28 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B35" />
-        <Text style={styles.loadingText}>Loading feed...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoIcon}>
+              <Text style={styles.logoEmoji}>🌍</Text>
+            </View>
+            <Text style={styles.logo}>UBIVAIS</Text>
+          </View>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity style={styles.iconButton}>
+              <IconSymbol name="magnifyingglass" size={24} color="#000" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton}>
+              <IconSymbol name="bell.fill" size={24} color="#000" />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <ScrollView>
+          <SkeletonStories />
+          <SkeletonFeed count={3} />
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 

@@ -1,4 +1,4 @@
-// services/post.service.ts
+// services/post.service.ts - OPTIMIZED
 import { db } from '@/config/firebase';
 import { ItineraryBox, Post } from '@/types';
 import {
@@ -17,10 +17,13 @@ import {
   Timestamp,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 
 class PostService {
   private postsCollection = collection(db, 'posts');
+  // Cache per likes per ridurre chiamate Firestore
+  private likesCache = new Map<string, boolean>();
 
   // Crea nuovo post
   async createPost(
@@ -34,12 +37,14 @@ class PostService {
       const postId = doc(this.postsCollection).id;
 
       const userDoc = await getDoc(doc(db, 'users', userId));
-      const username = userDoc.exists() ? userDoc.data().username : 'Unknown';
+      const userData = userDoc.exists() ? userDoc.data() : null;
+      const username = userData?.username || 'Unknown';
+      const userAvatar = userData?.profilePic || undefined;
 
-      // ✅ SOLUZIONE: Costruisci l'oggetto post dinamicamente
       const newPost: Partial<Post> = {
         userId,
         username,
+        userAvatar,
         media: mediaUrls.map((url) => ({
           type: url.includes('.mp4') ? 'video' : 'image',
           url,
@@ -49,17 +54,14 @@ class PostService {
         likesCount: 0,
         commentsCount: 0,
         savesCount: 0,
-        /* userAvatar: userDoc.exists() ? userDoc.data().avatarUrl : null, */
         createdAt: new Date(),
         updatedAt: new Date(),
       };
 
-      // ✅ Aggiungi location SOLO se definito
       if (location && location.name) {
         newPost.location = location;
       }
 
-      // ✅ Converti Date in Timestamp per Firebase
       const postData = {
         ...newPost,
         createdAt: Timestamp.fromDate(newPost.createdAt as Date),
@@ -68,7 +70,6 @@ class PostService {
 
       await setDoc(doc(db, 'posts', postId), postData);
 
-      // Incrementa contatore post utente
       await updateDoc(doc(db, 'users', userId), {
         postsCount: increment(1),
       });
@@ -160,28 +161,88 @@ class PostService {
     }
   }
 
+  // ✅ OTTIMIZZATO: Batch check likes per multipli post
+  async batchCheckLikes(postIds: string[], userId: string): Promise<Map<string, boolean>> {
+    try {
+      const likesMap = new Map<string, boolean>();
+      
+      // Controlla prima la cache
+      const uncachedPostIds = postIds.filter(postId => {
+        const cacheKey = `${postId}_${userId}`;
+        if (this.likesCache.has(cacheKey)) {
+          likesMap.set(postId, this.likesCache.get(cacheKey)!);
+          return false;
+        }
+        return true;
+      });
+
+      // Se tutti i post sono in cache, ritorna subito
+      if (uncachedPostIds.length === 0) {
+        return likesMap;
+      }
+
+      // Batch read da Firestore per post non in cache
+      const likeChecks = await Promise.all(
+        uncachedPostIds.map(async (postId) => {
+          const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', userId));
+          const isLiked = likeDoc.exists();
+          
+          // Salva in cache
+          const cacheKey = `${postId}_${userId}`;
+          this.likesCache.set(cacheKey, isLiked);
+          
+          return { postId, isLiked };
+        })
+      );
+
+      // Aggiungi risultati alla mappa
+      likeChecks.forEach(({ postId, isLiked }) => {
+        likesMap.set(postId, isLiked);
+      });
+
+      return likesMap;
+    } catch (error) {
+      console.error('Error batch checking likes:', error);
+      return new Map();
+    }
+  }
+
   // Like/Unlike post
   async toggleLike(postId: string, userId: string) {
     try {
       const likeRef = doc(db, 'posts', postId, 'likes', userId);
       const likeDoc = await getDoc(likeRef);
 
+      const batch = writeBatch(db);
+
       if (likeDoc.exists()) {
         // Unlike
-        await deleteDoc(likeRef);
-        await updateDoc(doc(db, 'posts', postId), {
+        batch.delete(likeRef);
+        batch.update(doc(db, 'posts', postId), {
           likesCount: increment(-1),
         });
+        
+        // Aggiorna cache
+        const cacheKey = `${postId}_${userId}`;
+        this.likesCache.set(cacheKey, false);
+        
+        await batch.commit();
         return { success: true, liked: false };
       } else {
         // Like
-        await setDoc(likeRef, {
+        batch.set(likeRef, {
           userId,
           createdAt: Timestamp.now(),
         });
-        await updateDoc(doc(db, 'posts', postId), {
+        batch.update(doc(db, 'posts', postId), {
           likesCount: increment(1),
         });
+        
+        // Aggiorna cache
+        const cacheKey = `${postId}_${userId}`;
+        this.likesCache.set(cacheKey, true);
+        
+        await batch.commit();
         return { success: true, liked: true };
       }
     } catch (error: any) {
@@ -190,15 +251,33 @@ class PostService {
     }
   }
 
-  // Check se utente ha messo like
+  // Check se utente ha messo like (con cache)
   async hasLiked(postId: string, userId: string): Promise<boolean> {
     try {
+      const cacheKey = `${postId}_${userId}`;
+      
+      // Controlla cache
+      if (this.likesCache.has(cacheKey)) {
+        return this.likesCache.get(cacheKey)!;
+      }
+
+      // Se non in cache, controlla Firestore
       const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', userId));
-      return likeDoc.exists();
+      const isLiked = likeDoc.exists();
+      
+      // Salva in cache
+      this.likesCache.set(cacheKey, isLiked);
+      
+      return isLiked;
     } catch (error) {
       console.error('Error checking like:', error);
       return false;
     }
+  }
+
+  // Clear cache (chiamare al logout)
+  clearCache() {
+    this.likesCache.clear();
   }
 
   // Elimina post
@@ -216,7 +295,6 @@ class PostService {
 
       await deleteDoc(doc(db, 'posts', postId));
 
-      // Decrementa contatore
       await updateDoc(doc(db, 'users', userId), {
         postsCount: increment(-1),
       });
