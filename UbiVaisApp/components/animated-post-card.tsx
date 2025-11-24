@@ -276,14 +276,9 @@ export function AnimatedPostCard({
       {/* Header del Post */}
       <View style={styles.postHeader}>
         {/* ✅ Click to profile */}
-        <TouchableOpacity 
+         <TouchableOpacity 
           style={styles.userInfo}
-          onPress={() =>
-          router.push({
-            pathname: "/profile",
-            params: { id: String(post.userId) }
-          })
-        }>
+          onPress={() => router.push(`/profile/${post.userId}`)}>
           <Image 
             source={{ 
               uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`

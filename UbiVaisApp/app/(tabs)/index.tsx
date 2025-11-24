@@ -1,14 +1,4 @@
 // app/(tabs)/index.tsx - OPTIMIZED VERSION
-
-//TODO : Implementare batch checking dei likes per migliorare le performance
-//TODO: Implementare caricamento più fluido con placeholder durante l'infinite scroll
-//TODO: Aggiungere messaggio di fine feed quando non ci sono più post da caricare
-//TODO: introdurre click to profile quando premuto il nome utente di un utente 
-//TODO: rendere l'immagine avatar l'effettiva immagine utente
-//TODO: rendere il post modificabile ed eliminabile da parte dell'utente che l'ha creato ( tramite i tre puntini del post nella home)
-//TODO: ottimizzare le immagini caricate con compressione e resizing
-//TODO: rendere funzionanti i collegamenti ai post nell'area il mio profilo 
-
 import { AnimatedPostCard } from '@/components/animated-post-card';
 import { SkeletonFeed, SkeletonStories } from '@/components/skeleton-loader';
 import { IconSymbol } from '@/components/ui/icon-symbol';
