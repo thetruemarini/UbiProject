@@ -327,6 +327,14 @@ export default function HomeScreen() {
               post={post}
               isLiked={isLiked}
               onLike={() => handleLike(post.id)}
+              onDelete={() => {
+                // Rimuovi post dalla lista
+                setPosts(posts.filter(p => p.id !== post.id));
+              }}
+              onUpdate={() => {
+                // Ricarica feed per vedere modifiche
+                loadInitialFeed();
+              }}
               formatTimeAgo={formatTimeAgo}
             />
           );

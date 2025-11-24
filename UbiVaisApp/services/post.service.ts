@@ -1,4 +1,4 @@
-// services/post.service.ts - OPTIMIZED
+// services/post.service.ts - OPTIMIZED WITH IMAGE COMPRESSION
 import { db } from '@/config/firebase';
 import { ItineraryBox, Post } from '@/types';
 import {
@@ -22,10 +22,21 @@ import {
 
 class PostService {
   private postsCollection = collection(db, 'posts');
-  // Cache per likes per ridurre chiamate Firestore
   private likesCache = new Map<string, boolean>();
 
-  // Crea nuovo post
+  // ✅ NUOVO: Helper per ottimizzare URL immagini (Cloudinary)
+  optimizeImageUrl(url: string, width: number = 800, quality: number = 80): string {
+    // Se è Cloudinary, aggiungi trasformazioni
+    if (url.includes('cloudinary.com')) {
+      const parts = url.split('/upload/');
+      if (parts.length === 2) {
+        return `${parts[0]}/upload/w_${width},q_${quality},f_auto/${parts[1]}`;
+      }
+    }
+    return url;
+  }
+
+  // Crea nuovo post con userAvatar
   async createPost(
     userId: string,
     caption: string,
@@ -36,6 +47,7 @@ class PostService {
     try {
       const postId = doc(this.postsCollection).id;
 
+      // ✅ Carica dati utente completi
       const userDoc = await getDoc(doc(db, 'users', userId));
       const userData = userDoc.exists() ? userDoc.data() : null;
       const username = userData?.username || 'Unknown';
@@ -44,7 +56,7 @@ class PostService {
       const newPost: Partial<Post> = {
         userId,
         username,
-        userAvatar,
+        userAvatar, // ✅ Salva avatar utente
         media: mediaUrls.map((url) => ({
           type: url.includes('.mp4') ? 'video' : 'image',
           url,
@@ -161,12 +173,11 @@ class PostService {
     }
   }
 
-  // ✅ OTTIMIZZATO: Batch check likes per multipli post
+  // Batch check likes per multipli post
   async batchCheckLikes(postIds: string[], userId: string): Promise<Map<string, boolean>> {
     try {
       const likesMap = new Map<string, boolean>();
       
-      // Controlla prima la cache
       const uncachedPostIds = postIds.filter(postId => {
         const cacheKey = `${postId}_${userId}`;
         if (this.likesCache.has(cacheKey)) {
@@ -176,18 +187,15 @@ class PostService {
         return true;
       });
 
-      // Se tutti i post sono in cache, ritorna subito
       if (uncachedPostIds.length === 0) {
         return likesMap;
       }
 
-      // Batch read da Firestore per post non in cache
       const likeChecks = await Promise.all(
         uncachedPostIds.map(async (postId) => {
           const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', userId));
           const isLiked = likeDoc.exists();
           
-          // Salva in cache
           const cacheKey = `${postId}_${userId}`;
           this.likesCache.set(cacheKey, isLiked);
           
@@ -195,7 +203,6 @@ class PostService {
         })
       );
 
-      // Aggiungi risultati alla mappa
       likeChecks.forEach(({ postId, isLiked }) => {
         likesMap.set(postId, isLiked);
       });
@@ -216,20 +223,17 @@ class PostService {
       const batch = writeBatch(db);
 
       if (likeDoc.exists()) {
-        // Unlike
         batch.delete(likeRef);
         batch.update(doc(db, 'posts', postId), {
           likesCount: increment(-1),
         });
         
-        // Aggiorna cache
         const cacheKey = `${postId}_${userId}`;
         this.likesCache.set(cacheKey, false);
         
         await batch.commit();
         return { success: true, liked: false };
       } else {
-        // Like
         batch.set(likeRef, {
           userId,
           createdAt: Timestamp.now(),
@@ -238,7 +242,6 @@ class PostService {
           likesCount: increment(1),
         });
         
-        // Aggiorna cache
         const cacheKey = `${postId}_${userId}`;
         this.likesCache.set(cacheKey, true);
         
@@ -251,21 +254,18 @@ class PostService {
     }
   }
 
-  // Check se utente ha messo like (con cache)
+  // Check se utente ha messo like
   async hasLiked(postId: string, userId: string): Promise<boolean> {
     try {
       const cacheKey = `${postId}_${userId}`;
       
-      // Controlla cache
       if (this.likesCache.has(cacheKey)) {
         return this.likesCache.get(cacheKey)!;
       }
 
-      // Se non in cache, controlla Firestore
       const likeDoc = await getDoc(doc(db, 'posts', postId, 'likes', userId));
       const isLiked = likeDoc.exists();
       
-      // Salva in cache
       this.likesCache.set(cacheKey, isLiked);
       
       return isLiked;
@@ -275,7 +275,39 @@ class PostService {
     }
   }
 
-  // Clear cache (chiamare al logout)
+  // ✅ NUOVO: Aggiorna post
+  async updatePost(postId: string, userId: string, caption: string, location?: { name: string }) {
+    try {
+      const postDoc = await getDoc(doc(db, 'posts', postId));
+      
+      if (!postDoc.exists()) {
+        return { success: false, error: 'Post non trovato' };
+      }
+
+      const post = postDoc.data();
+      if (post.userId !== userId) {
+        return { success: false, error: 'Non autorizzato' };
+      }
+
+      const updateData: any = {
+        caption,
+        updatedAt: Timestamp.now(),
+      };
+
+      if (location && location.name) {
+        updateData.location = location;
+      }
+
+      await updateDoc(doc(db, 'posts', postId), updateData);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error updating post:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Clear cache
   clearCache() {
     this.likesCache.clear();
   }

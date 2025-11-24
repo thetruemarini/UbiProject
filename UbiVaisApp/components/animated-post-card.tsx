@@ -1,15 +1,22 @@
 // components/animated-post-card.tsx
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useAuth } from '@/contexts/auth-context';
+import PostService from '@/services/post.service';
 import { Post } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   Dimensions,
   Image,
+  Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -28,6 +35,8 @@ interface AnimatedPostCardProps {
   post: Post;
   isLiked: boolean;
   onLike: () => void;
+  onDelete?: () => void;
+  onUpdate?: () => void;
   formatTimeAgo: (date: Date) => string;
 }
 
@@ -143,9 +152,17 @@ function AnimatedLikeButton({
 export function AnimatedPostCard({ 
   post, 
   isLiked, 
-  onLike, 
+  onLike,
+  onDelete,
+  onUpdate,
   formatTimeAgo 
 }: AnimatedPostCardProps) {
+  const { user } = useAuth();
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editCaption, setEditCaption] = useState(post.caption);
+  const [editLocation, setEditLocation] = useState(post.location?.name || '');
+  const [saving, setSaving] = useState(false);
+
   // Animazione fade-in del post
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -165,11 +182,108 @@ export function AnimatedPostCard({
     };
   });
 
+  // ✅ Menu post (Edit/Delete/Cancel)
+  const handlePostMenu = () => {
+    if (!user || post.userId !== user.id) return;
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Edit Post', 'Delete Post'],
+          destructiveButtonIndex: 2,
+          cancelButtonIndex: 0,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            // Edit
+            setEditModalVisible(true);
+          } else if (buttonIndex === 2) {
+            // Delete
+            handleDeletePost();
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Post Options',
+        'What would you like to do?',
+        [
+          { text: 'Edit Post', onPress: () => setEditModalVisible(true) },
+          { 
+            text: 'Delete Post', 
+            onPress: handleDeletePost,
+            style: 'destructive'
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  // ✅ Elimina post
+  const handleDeletePost = () => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await PostService.deletePost(post.id, user!.id);
+            if (result.success) {
+              if (onDelete) onDelete();
+              Alert.alert('Success', 'Post deleted successfully');
+            } else {
+              Alert.alert('Error', result.error || 'Failed to delete post');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // ✅ Aggiorna post
+  const handleUpdatePost = async () => {
+    if (!editCaption.trim()) {
+      Alert.alert('Error', 'Caption cannot be empty');
+      return;
+    }
+
+    setSaving(true);
+
+    const result = await PostService.updatePost(
+      post.id,
+      user!.id,
+      editCaption.trim(),
+      editLocation.trim() ? { name: editLocation.trim() } : undefined
+    );
+
+    setSaving(false);
+
+    if (result.success) {
+      setEditModalVisible(false);
+      if (onUpdate) onUpdate();
+      Alert.alert('Success', 'Post updated successfully');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to update post');
+    }
+  };
+
   return (
     <Animated.View style={[styles.postCard, animatedCardStyle]}>
       {/* Header del Post */}
       <View style={styles.postHeader}>
-        <TouchableOpacity style={styles.userInfo}>
+        {/* ✅ Click to profile */}
+        <TouchableOpacity 
+          style={styles.userInfo}
+          onPress={() =>
+          router.push({
+            pathname: "/profile",
+            params: { id: String(post.userId) }
+          })
+        }>
           <Image 
             source={{ 
               uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`
@@ -185,12 +299,18 @@ export function AnimatedPostCard({
             )}
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.moreButton}>
-          <IconSymbol name="ellipsis" size={18} color="#666" />
-        </TouchableOpacity>
+
+        {/* ✅ Menu button solo se post dell'utente */}
+        {user && post.userId === user.id ? (
+          <TouchableOpacity style={styles.moreButton} onPress={handlePostMenu}>
+            <IconSymbol name="ellipsis" size={18} color="#666" />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.moreButton} />
+        )}
       </View>
 
-      {/* Gallery Carousel - ONE TAP per aprire */}
+      {/* Gallery Carousel */}
       <AnimatedPostGallery 
         media={post.media} 
         postId={post.id}
@@ -248,6 +368,54 @@ export function AnimatedPostCard({
 
       {/* Timestamp */}
       <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
+
+      {/* ✅ Modal Edit Post */}
+      <Modal
+        visible={editModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setEditModalVisible(false)}>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Edit Post</Text>
+            <TouchableOpacity onPress={handleUpdatePost} disabled={saving}>
+              <Text style={[styles.modalSave, saving && styles.modalSaveDisabled]}>
+                {saving ? 'Saving...' : 'Save'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView style={styles.modalContent}>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Caption</Text>
+              <TextInput
+                style={[styles.input, styles.captionInput]}
+                value={editCaption}
+                onChangeText={setEditCaption}
+                placeholder="Write a caption..."
+                placeholderTextColor="#999"
+                multiline
+                maxLength={2200}
+              />
+              <Text style={styles.charCount}>{editCaption.length}/2200</Text>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Location (optional)</Text>
+              <TextInput
+                style={styles.input}
+                value={editLocation}
+                onChangeText={setEditLocation}
+                placeholder="Add location..."
+                placeholderTextColor="#999"
+              />
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
     </Animated.View>
   );
 }
@@ -400,5 +568,64 @@ const styles = StyleSheet.create({
     color: '#8e8e8e',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#dbdbdb',
+  },
+  modalCancel: {
+    fontSize: 16,
+    color: '#000',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  modalSave: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FF6B35',
+  },
+  modalSaveDisabled: {
+    color: '#ccc',
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  formGroup: {
+    marginBottom: 24,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  captionInput: {
+    minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  charCount: {
+    fontSize: 12,
+    color: '#999',
+    textAlign: 'right',
+    marginTop: 4,
   },
 });
