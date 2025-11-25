@@ -1,17 +1,17 @@
-// app/(auth)/login.tsx
+// app/(auth)/login.tsx - AGGIORNATO CON KEYBOARD HANDLING
+import { KeyboardAwareContainer } from '@/components/keyboard-aware-container';
 import { useAuth } from '@/contexts/auth-context';
 import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 
 export default function LoginScreen() {
@@ -31,7 +31,6 @@ export default function LoginScreen() {
     setLoading(false);
 
     if (result.success) {
-      // Redirect automatico gestito dall'index
       router.replace('/(tabs)');
     } else {
       Alert.alert('Errore Login', result.error);
@@ -39,57 +38,63 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text style={styles.title}>UbiVais</Text>
-          <Text style={styles.subtitle}>Bentornato! 👋</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      {/* ✅ Usa KeyboardAwareContainer invece di KeyboardAvoidingView + ScrollView */}
+      <KeyboardAwareContainer
+        dismissKeyboardOnTap={true}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <Text style={styles.title}>UbiVais</Text>
+            <Text style={styles.subtitle}>Bentornato! 👋</Text>
+          </View>
 
-        <View style={styles.form}>
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#999"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            editable={!loading}
-          />
+          <View style={styles.form}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#999"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              editable={!loading}
+              returnKeyType="next"
+            />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            editable={!loading}
-          />
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#999"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+            />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}>
-            <Text style={styles.buttonText}>
-              {loading ? 'Accesso in corso...' : 'Accedi'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.button, loading && styles.buttonDisabled]}
+              onPress={handleLogin}
+              disabled={loading}>
+              <Text style={styles.buttonText}>
+                {loading ? 'Accesso in corso...' : 'Accedi'}
+              </Text>
+            </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Non hai un account? </Text>
-            <Link href="/signup" asChild>
-              <TouchableOpacity>
-                <Text style={styles.linkText}>Registrati</Text>
-              </TouchableOpacity>
-            </Link>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Non hai un account? </Text>
+              <Link href="/signup" asChild>
+                <TouchableOpacity>
+                  <Text style={styles.linkText}>Registrati</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
           </View>
         </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAwareContainer>
+    </SafeAreaView>
   );
 }
 
@@ -98,8 +103,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
-  scrollContent: {
-    flexGrow: 1,
+  content: {
+    flex: 1,
     justifyContent: 'center',
     padding: 20,
   },

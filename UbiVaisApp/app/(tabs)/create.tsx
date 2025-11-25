@@ -1,4 +1,4 @@
-// app/(tabs)/create.tsx
+// app/(tabs)/create.tsx - INPUT CHE SI AGGANCIA SOPRA LA TASTIERA
 import { useAuth } from '@/contexts/auth-context';
 import StorageService from '@/services/cloudinary.service';
 import PostService from '@/services/post.service';
@@ -52,7 +52,6 @@ export default function CreateScreen() {
     setUploading(true);
 
     try {
-      // 1. Upload immagini su Firebase Storage
       console.log('📤 Upload immagini...');
       const uris = selectedMedia.map(media => media.uri);
       const uploadResult = await StorageService.uploadMultipleFiles(uris, user.id);
@@ -65,13 +64,12 @@ export default function CreateScreen() {
 
       console.log('✅ Immagini caricate:', uploadResult.urls);
 
-      // 2. Crea post su Firestore
       console.log('💾 Creazione post...');
       const postResult = await PostService.createPost(
         user.id,
         caption.trim(),
         uploadResult.urls!,
-        [], // itineraryBoxes vuoto per ora
+        [],
         location.trim() ? { name: location.trim() } : undefined
       );
 
@@ -83,7 +81,6 @@ export default function CreateScreen() {
 
       console.log('✅ Post creato con ID:', postResult.postId);
 
-      // 3. Reset form e torna al feed
       Alert.alert(
         'Post pubblicato! 🎉',
         'Il tuo post è stato pubblicato con successo',
@@ -113,31 +110,39 @@ export default function CreateScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header FUORI dal KeyboardAvoidingView */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.cancelButton}>Annulla</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Nuovo Post</Text>
+        <TouchableOpacity
+          onPress={handleCreatePost}
+          disabled={uploading || selectedMedia.length === 0 || !caption.trim()}>
+          <Text
+            style={[
+              styles.publishButton,
+              (uploading || selectedMedia.length === 0 || !caption.trim()) &&
+                styles.publishButtonDisabled,
+            ]}>
+            {uploading ? 'Caricamento...' : 'Pubblica'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* ✅ KeyboardAvoidingView wrappa ScrollView */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
+        style={styles.flex}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}>
         
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.cancelButton}>Annulla</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Nuovo Post</Text>
-          <TouchableOpacity
-            onPress={handleCreatePost}
-            disabled={uploading || selectedMedia.length === 0 || !caption.trim()}>
-            <Text
-              style={[
-                styles.publishButton,
-                (uploading || selectedMedia.length === 0 || !caption.trim()) &&
-                  styles.publishButtonDisabled,
-              ]}>
-              {uploading ? 'Caricamento...' : 'Pubblica'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.content} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={styles.scrollContent}>
+          
           {/* Media Selection */}
           {selectedMedia.length > 0 ? (
             <View style={styles.mediaPreview}>
@@ -181,6 +186,9 @@ export default function CreateScreen() {
               multiline
               maxLength={2200}
               editable={!uploading}
+              textAlignVertical="top"
+              returnKeyType="default"
+              blurOnSubmit={false}
             />
             <Text style={styles.charCount}>{caption.length}/2200</Text>
           </View>
@@ -195,6 +203,7 @@ export default function CreateScreen() {
               value={location}
               onChangeText={setLocation}
               editable={!uploading}
+              returnKeyType="done"
             />
           </View>
 
@@ -227,7 +236,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  keyboardView: {
+  flex: {
     flex: 1,
   },
   header: {
@@ -238,6 +247,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 0.5,
     borderBottomColor: '#e0e0e0',
+    backgroundColor: '#fff',
   },
   cancelButton: {
     fontSize: 16,
@@ -258,6 +268,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   uploadArea: {
     backgroundColor: '#f9f9f9',
@@ -389,4 +402,4 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
-}); 
+});

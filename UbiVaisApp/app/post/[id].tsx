@@ -1,4 +1,4 @@
-// app/post/[id].tsx - FINAL CLEAN VERSION WITH ANIMATIONS
+// app/post/[id].tsx - INPUT FISSO SOPRA TASTIERA (FIXED)
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/auth-context';
@@ -22,7 +22,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import Animated, {
@@ -44,7 +43,6 @@ interface Comment {
   createdAt: Date;
 }
 
-// Gallery Component con animazioni doppio tap
 function PostDetailGallery({ 
   media, 
   onDoubleTap 
@@ -56,7 +54,6 @@ function PostDetailGallery({
   const scrollViewRef = useRef<ScrollView>(null);
   const lastTap = useRef<number>(0);
   
-  // Animazione cuore centrale
   const heartScale = useSharedValue(0);
   const heartOpacity = useSharedValue(0);
 
@@ -71,40 +68,26 @@ function PostDetailGallery({
     const DOUBLE_TAP_DELAY = 300;
 
     if (now - lastTap.current < DOUBLE_TAP_DELAY) {
-      // Double tap rilevato!
-      if (onDoubleTap) {
-        onDoubleTap();
-      }
+      if (onDoubleTap) onDoubleTap();
       
-      // Haptic feedback
       if (process.env.EXPO_OS === 'ios') {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       }
       
-      // Trigger animazione cuore
       heartScale.value = 0;
       heartOpacity.value = 1;
       
-      heartScale.value = withSpring(1.2, {
-        damping: 8,
-        stiffness: 100,
-      });
-      
-      heartOpacity.value = withDelay(
-        500,
-        withTiming(0, { duration: 400 })
-      );
+      heartScale.value = withSpring(1.2, { damping: 8, stiffness: 100 });
+      heartOpacity.value = withDelay(500, withTiming(0, { duration: 400 }));
     }
     
     lastTap.current = now;
   };
 
-  const animatedHeartStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: heartScale.value }],
-      opacity: heartOpacity.value,
-    };
-  });
+  const animatedHeartStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+    opacity: heartOpacity.value,
+  }));
 
   return (
     <View style={styles.galleryContainer}>
@@ -116,35 +99,25 @@ function PostDetailGallery({
         onScroll={handleScroll}
         scrollEventThrottle={16}>
         {media.map((item, index) => (
-          <TouchableWithoutFeedback
+          <TouchableOpacity
             key={index}
+            activeOpacity={1}
             onPress={handleDoubleTap}>
-            <View>
-              <Image
-                source={{ uri: item.url }}
-                style={styles.postImage}
-                resizeMode="cover"
-              />
-            </View>
-          </TouchableWithoutFeedback>
+            <Image source={{ uri: item.url }} style={styles.postImage} resizeMode="cover" />
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {/* Cuore animato centrale */}
       <Animated.View style={[styles.centerHeart, animatedHeartStyle]} pointerEvents="none">
         <IconSymbol name="heart.fill" size={120} color="#fff" />
       </Animated.View>
 
-      {/* Dots indicator */}
       {media.length > 1 && (
         <View style={styles.dotsContainer}>
           {media.map((_, index) => (
             <View
               key={index}
-              style={[
-                styles.dot,
-                index === currentIndex ? styles.dotActive : styles.dotInactive,
-              ]}
+              style={[styles.dot, index === currentIndex ? styles.dotActive : styles.dotInactive]}
             />
           ))}
         </View>
@@ -219,7 +192,6 @@ export default function PostDetailScreen() {
   const handleLike = async () => {
     if (!post || !user) return;
 
-    // Haptic feedback
     if (process.env.EXPO_OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }
@@ -266,7 +238,6 @@ export default function PostDetailScreen() {
       setCommentText('');
       Keyboard.dismiss();
       
-      // Scroll to bottom per mostrare il nuovo commento
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
@@ -298,127 +269,121 @@ export default function PostDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <IconSymbol name="chevron.right" size={28} color="#262626" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Post</Text>
+        <View style={styles.headerRight} />
+      </View>
+
+      {/* ✅ SOLUZIONE: KeyboardAvoidingView che wrappa TUTTO */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}
-        keyboardVerticalOffset={0}>
+        style={styles.flex}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}>
         
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <IconSymbol name="chevron.right" size={28} color="#262626" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Post</Text>
-          <View style={styles.headerRight} />
-        </View>
+        {/* ScrollView del contenuto */}
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={styles.scrollContent}>
+          
+          {/* Post Header */}
+          <View style={styles.postHeader}>
+            <Image 
+              source={{ 
+                uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`
+              }} 
+              style={styles.userAvatar} 
+            />
+            <View style={styles.userInfo}>
+              <Text style={styles.username}>{post.username}</Text>
+              {post.location && <Text style={styles.location}>{post.location.name}</Text>}
+            </View>
+            <TouchableOpacity style={styles.moreButton}>
+              <IconSymbol name="ellipsis" size={20} color="#8e8e8e" />
+            </TouchableOpacity>
+          </View>
 
-        {/* Content - Scrollabile con dismissal tastiera */}
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <ScrollView 
-            ref={scrollViewRef}
-            style={styles.scrollView} 
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled">
-            
-            {/* Post Header */}
-            <View style={styles.postHeader}>
-              <Image 
-                source={{ 
-                  uri: post.userAvatar || `https://ui-avatars.com/api/?name=${post.username}&background=FF6B35&color=fff&size=128`
-                }} 
-                style={styles.userAvatar} 
-              />
-              <View style={styles.userInfo}>
-                <Text style={styles.username}>{post.username}</Text>
-                {post.location && (
-                  <Text style={styles.location}>{post.location.name}</Text>
-                )}
-              </View>
-              <TouchableOpacity style={styles.moreButton}>
-                <IconSymbol name="ellipsis" size={20} color="#8e8e8e" />
+          {/* Gallery */}
+          <PostDetailGallery media={post.media} onDoubleTap={handleDoubleTapLike} />
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <View style={styles.leftActions}>
+              <TouchableOpacity onPress={handleLike} style={styles.actionButton}>
+                <IconSymbol 
+                  name={isLiked ? "heart.fill" : "heart"} 
+                  size={28} 
+                  color={isLiked ? "#FF6B35" : "#262626"} 
+                />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => commentInputRef.current?.focus()}>
+                <IconSymbol name="message" size={26} color="#262626" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.actionButton}>
+                <IconSymbol name="paperplane" size={26} color="#262626" />
               </TouchableOpacity>
             </View>
+            <TouchableOpacity>
+              <IconSymbol name="bookmark" size={26} color="#262626" />
+            </TouchableOpacity>
+          </View>
 
-            {/* Post Gallery - Con animazioni */}
-            <PostDetailGallery media={post.media} onDoubleTap={handleDoubleTapLike} />
+          {/* Likes */}
+          {post.likesCount > 0 && (
+            <Text style={styles.likes}>
+              {post.likesCount.toLocaleString()} {post.likesCount === 1 ? 'like' : 'likes'}
+            </Text>
+          )}
 
-            {/* Actions */}
-            <View style={styles.actions}>
-              <View style={styles.leftActions}>
-                <TouchableOpacity onPress={handleLike} style={styles.actionButton}>
-                  <IconSymbol 
-                    name={isLiked ? "heart.fill" : "heart"} 
-                    size={28} 
-                    color={isLiked ? "#FF6B35" : "#262626"} 
+          {/* Caption */}
+          <View style={styles.captionContainer}>
+            <Text style={styles.caption}>
+              <Text style={styles.captionUsername}>{post.username}</Text> {post.caption}
+            </Text>
+            <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
+          </View>
+
+          {/* Comments */}
+          <View style={styles.commentsSection}>
+            <Text style={styles.commentsTitle}>Comments ({post.commentsCount})</Text>
+
+            {comments.length === 0 ? (
+              <View style={styles.noComments}>
+                <Text style={styles.noCommentsIcon}>💬</Text>
+                <Text style={styles.noCommentsText}>No comments yet</Text>
+                <Text style={styles.noCommentsSubtext}>Be the first to comment!</Text>
+              </View>
+            ) : (
+              comments.map((comment) => (
+                <View key={comment.id} style={styles.comment}>
+                  <Image 
+                    source={{ 
+                      uri: comment.userAvatar || `https://ui-avatars.com/api/?name=${comment.username}&background=FF6B35&color=fff&size=128`
+                    }} 
+                    style={styles.commentAvatar} 
                   />
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => commentInputRef.current?.focus()}>
-                  <IconSymbol name="message" size={26} color="#262626" />
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton}>
-                  <IconSymbol name="paperplane" size={26} color="#262626" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity>
-                <IconSymbol name="bookmark" size={26} color="#262626" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Likes */}
-            {post.likesCount > 0 && (
-              <Text style={styles.likes}>
-                {post.likesCount.toLocaleString()} {post.likesCount === 1 ? 'like' : 'likes'}
-              </Text>
-            )}
-
-            {/* Caption */}
-            <View style={styles.captionContainer}>
-              <Text style={styles.caption}>
-                <Text style={styles.captionUsername}>{post.username}</Text> {post.caption}
-              </Text>
-              <Text style={styles.timestamp}>{formatTimeAgo(post.createdAt)}</Text>
-            </View>
-
-            {/* Comments Section */}
-            <View style={styles.commentsSection}>
-              <Text style={styles.commentsTitle}>
-                Comments ({post.commentsCount})
-              </Text>
-
-              {comments.length === 0 ? (
-                <View style={styles.noComments}>
-                  <Text style={styles.noCommentsIcon}>💬</Text>
-                  <Text style={styles.noCommentsText}>No comments yet</Text>
-                  <Text style={styles.noCommentsSubtext}>Be the first to comment!</Text>
-                </View>
-              ) : (
-                comments.map((comment) => (
-                  <View key={comment.id} style={styles.comment}>
-                    <Image 
-                      source={{ 
-                        uri: comment.userAvatar || `https://ui-avatars.com/api/?name=${comment.username}&background=FF6B35&color=fff&size=128`
-                      }} 
-                      style={styles.commentAvatar} 
-                    />
-                    <View style={styles.commentContent}>
-                      <Text style={styles.commentText}>
-                        <Text style={styles.commentUsername}>{comment.username}</Text> {comment.text}
-                      </Text>
-                      <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
-                    </View>
+                  <View style={styles.commentContent}>
+                    <Text style={styles.commentText}>
+                      <Text style={styles.commentUsername}>{comment.username}</Text> {comment.text}
+                    </Text>
+                    <Text style={styles.commentTime}>{formatTimeAgo(comment.createdAt)}</Text>
                   </View>
-                ))
-              )}
-              
-              {/* Spazio extra per scrollare oltre l'ultimo commento */}
-              <View style={{ height: 100 }} />
-            </View>
-          </ScrollView>
-        </TouchableWithoutFeedback>
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
 
-        {/* Comment Input - Fisso in basso con keyboard avoidance */}
+        {/* ✅ Input Container - FUORI dallo ScrollView ma DENTRO KeyboardAvoidingView */}
         <View style={styles.commentInputContainer}>
           <Image 
             source={{ 
@@ -437,6 +402,7 @@ export default function PostDetailScreen() {
             maxLength={500}
             returnKeyType="send"
             onSubmitEditing={handleSendComment}
+            blurOnSubmit={false}
           />
           <TouchableOpacity 
             onPress={handleSendComment} 
@@ -466,7 +432,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff',
   },
-  keyboardView: {
+  flex: {
     flex: 1,
   },
   header: {
@@ -492,6 +458,9 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   postHeader: {
     flexDirection: 'row',
@@ -659,12 +628,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8e8e8e',
   },
+  // ✅ CRITICO: Input fisso in basso
   commentInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderTopWidth: 0.5,
+    borderTopWidth: 1,
     borderTopColor: '#dbdbdb',
     backgroundColor: '#fff',
   },
