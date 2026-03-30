@@ -203,7 +203,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.endMessage}>
         <Text style={styles.endMessageIcon}>✨</Text>
-        <Text style={styles.endMessageText}>You're all caught up!</Text>
+        <Text style={styles.endMessageText}>You&apos;re all caught up!</Text>
         <Text style={styles.endMessageSubtext}>Check back later for more posts</Text>
       </View>
     );

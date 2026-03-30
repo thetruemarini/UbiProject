@@ -189,7 +189,7 @@ export default function OtherUserProfileScreen() {
             <Text style={styles.emptyIcon}>📸</Text>
             <Text style={styles.emptyTitle}>No posts yet</Text>
             <Text style={styles.emptyText}>
-              {profileUser.displayName} hasn't shared any posts yet
+              {profileUser.displayName} hasn&apos;t shared any posts yet
             </Text>
           </View>
         )}
