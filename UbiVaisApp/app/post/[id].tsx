@@ -3,7 +3,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
-import { Post } from '@/types';
+import ItineraryService from '@/services/itinerary.service';
+import { Post, ItineraryBox, BoxCategory } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { addDoc, collection, onSnapshot, orderBy, query, Timestamp } from 'firebase/firestore';
@@ -33,6 +34,34 @@ import Animated, {
 } from 'react-native-reanimated';
 
 const { width } = Dimensions.get('window');
+
+// Emoji per categorie box
+const CATEGORY_EMOJI: Record<BoxCategory, string> = {
+  food: '🍕',
+  experience: '🎭',
+  sport: '🏃',
+  culture: '🏛️',
+  nature: '🌿',
+  nightlife: '🌙',
+  shopping: '🛍️',
+  accommodation: '🏨',
+  transport: '🚗',
+  other: '✨',
+};
+
+// Colori badge per categoria
+const CATEGORY_COLORS: Record<BoxCategory, string> = {
+  food: '#FF6B6B',
+  experience: '#A855F7',
+  sport: '#3B82F6',
+  culture: '#F59E0B',
+  nature: '#10B981',
+  nightlife: '#6366F1',
+  shopping: '#EC4899',
+  accommodation: '#14B8A6',
+  transport: '#6B7280',
+  other: '#FF6B35',
+};
 
 interface Comment {
   id: string;

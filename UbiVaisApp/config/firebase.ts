@@ -1,6 +1,9 @@
 // config/firebase.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { initializeAuth } from 'firebase/auth';
+// @ts-expect-error - getReactNativePersistence esiste a runtime ma manca nelle definizioni TypeScript di Firebase 12.x
+import { getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -19,8 +22,12 @@ const firebaseConfig = {
 // Inizializza Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inizializza Auth (la persistenza è gestita automaticamente da Firebase)
-const auth = getAuth(app);
+// Inizializza Auth con persistenza React Native usando AsyncStorage
+// Questo è NECESSARIO per Firebase 12.x in React Native/Expo
+// per mantenere l'utente loggato dopo il riavvio dell'app
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
 // Inizializza Firestore
 const db = getFirestore(app);

@@ -2,10 +2,11 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
-import { Post } from '@/types';
+import ItineraryService from '@/services/itinerary.service';
+import { Post, BoxCategory, ItineraryBox } from '@/types';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
@@ -30,6 +31,20 @@ import Animated, {
 const { width } = Dimensions.get('window');
 const POST_WIDTH = width - 24;
 const POST_HEIGHT = POST_WIDTH * 1.1;
+
+// Emoji per categorie box
+export const CATEGORY_EMOJI: Record<BoxCategory, string> = {
+  food: '🍕',
+  experience: '🎭',
+  sport: '🏃',
+  culture: '🏛️',
+  nature: '🌿',
+  nightlife: '🌙',
+  shopping: '🛍️',
+  accommodation: '🏨',
+  transport: '🚗',
+  other: '✨',
+};
 
 interface AnimatedPostCardProps {
   post: Post;
@@ -163,6 +178,25 @@ export function AnimatedPostCard({
   const [editLocation, setEditLocation] = useState(post.location?.name || '');
   const [saving, setSaving] = useState(false);
 
+  // Stati per box esperienze
+  const [savedBoxIds, setSavedBoxIds] = useState<Set<string>>(new Set());
+
+  // Carica box salvati al mount
+  useEffect(() => {
+    if (!user || !post.boxes || post.boxes.length === 0) return;
+
+    const checkSavedBoxes = async () => {
+      const savedIds = new Set<string>();
+      for (const box of post.boxes) {
+        const isSaved = await ItineraryService.isBoxSaved(user.id, box.id);
+        if (isSaved) savedIds.add(box.id);
+      }
+      setSavedBoxIds(savedIds);
+    };
+
+    checkSavedBoxes();
+  }, [user, post.boxes]);
+
   // Animazione fade-in del post
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(20);
@@ -271,6 +305,25 @@ export function AnimatedPostCard({
     }
   };
 
+  // ✅ Salva box nel wallet
+  const handleSaveBox = async (box: ItineraryBox) => {
+    if (!user) return;
+
+    // Haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Salva nel DB (fire-and-forget)
+    const result = await ItineraryService.saveBox(user.id, box, post.id);
+
+    if (result.success) {
+      // Aggiorna stato
+      setSavedBoxIds(prev => new Set(prev).add(box.id));
+      Alert.alert('✓ Salvato!', 'Esperienza salvata nel tuo wallet!');
+    } else {
+      Alert.alert('Errore', result.error || 'Impossibile salvare');
+    }
+  };
+
   return (
     <Animated.View style={[styles.postCard, animatedCardStyle]}>
       {/* Header del Post */}
@@ -350,9 +403,77 @@ export function AnimatedPostCard({
         </Text>
       </View>
 
+      {/* Box Esperienze Preview */}
+      {post.boxes && post.boxes.length > 0 && (
+        <View style={styles.boxesPreviewSection}>
+          <View style={styles.boxesPreviewHeader}>
+            <Text style={styles.boxesPreviewTitle}>
+              ✨ {post.boxes.length} Esperienza{post.boxes.length !== 1 ? '/e' : ''}
+            </Text>
+          </View>
+
+          {/* Mostra max 2 box */}
+          {post.boxes.slice(0, 2).map((box) => {
+            const isSaved = savedBoxIds.has(box.id);
+            return (
+              <View key={box.id} style={styles.boxPreviewCard}>
+                <View style={styles.boxPreviewContent}>
+                  <Text style={styles.boxPreviewEmoji}>{CATEGORY_EMOJI[box.category]}</Text>
+                  <View style={styles.boxPreviewInfo}>
+                    <Text style={styles.boxPreviewTitle} numberOfLines={1}>
+                      {box.title}
+                    </Text>
+                    <View style={styles.boxPreviewMeta}>
+                      {box.duration && (
+                        <Text style={styles.boxPreviewMetaText}>⏱ {box.duration} min</Text>
+                      )}
+                      {box.rating && (
+                        <Text style={styles.boxPreviewMetaText}>
+                          {'⭐'.repeat(box.rating)}
+                        </Text>
+                      )}
+                      {box.location && (
+                        <Text style={styles.boxPreviewMetaText} numberOfLines={1}>
+                          📍 {box.location.name}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.boxSaveButton,
+                    isSaved && styles.boxSaveButtonSaved
+                  ]}
+                  onPress={() => handleSaveBox(box)}
+                  disabled={isSaved}>
+                  <Text style={[
+                    styles.boxSaveButtonText,
+                    isSaved && styles.boxSaveButtonTextSaved
+                  ]}>
+                    {isSaved ? '✓' : '+'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            );
+          })}
+
+          {/* Link "Vedi tutte" se > 2 box */}
+          {post.boxes.length > 2 && (
+            <TouchableOpacity
+              style={styles.viewAllBoxesLink}
+              onPress={() => router.push(`/post/${post.id}`)}>
+              <Text style={styles.viewAllBoxesText}>
+                Vedi tutte le {post.boxes.length} esperienze →
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       {/* Comments Link */}
       {post.commentsCount > 0 && (
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.commentsLink}
           onPress={() => router.push(`/post/${post.id}`)}>
           <Text style={styles.commentsLinkText}>
@@ -622,5 +743,87 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'right',
     marginTop: 4,
+  },
+  // Box Preview Styles
+  boxesPreviewSection: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    marginHorizontal: 12,
+    marginTop: 8,
+  },
+  boxesPreviewHeader: {
+    marginBottom: 8,
+  },
+  boxesPreviewTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF6B35',
+  },
+  boxPreviewCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 6,
+  },
+  boxPreviewContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
+  },
+  boxPreviewEmoji: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  boxPreviewInfo: {
+    flex: 1,
+  },
+  boxPreviewTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#262626',
+    marginBottom: 2,
+  },
+  boxPreviewMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  boxPreviewMetaText: {
+    fontSize: 11,
+    color: '#8e8e8e',
+  },
+  boxSaveButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FF6B35',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  boxSaveButtonSaved: {
+    backgroundColor: '#10B981',
+  },
+  boxSaveButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  boxSaveButtonTextSaved: {
+    fontSize: 16,
+  },
+  viewAllBoxesLink: {
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  viewAllBoxesText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FF6B35',
   },
 });

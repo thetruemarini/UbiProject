@@ -62,7 +62,7 @@ class PostService {
           url,
         })),
         caption,
-        itineraryBoxes,
+        boxes: itineraryBoxes, // ✅ Rinominato da itineraryBoxes a boxes
         likesCount: 0,
         commentsCount: 0,
         savesCount: 0,
