@@ -5,7 +5,6 @@ import { initializeAuth } from 'firebase/auth';
 // @ts-expect-error - getReactNativePersistence esiste a runtime ma manca nelle definizioni TypeScript di Firebase 12.x
 import { getReactNativePersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
 
 // TODO: Sostituisci con le tue credenziali Firebase
 // Le trovi in: Firebase Console → Impostazioni progetto → Le tue app → Config
@@ -32,7 +31,4 @@ const auth = initializeAuth(app, {
 // Inizializza Firestore
 const db = getFirestore(app);
 
-// Inizializza Storage
-const storage = getStorage(app);
-
-export { app, auth, db, storage };
+export { app, auth, db };

@@ -181,22 +181,6 @@ export interface Post {
   updatedAt: Date;
 }
 
-// Legacy — mantenuto per compatibilità
-export interface ItineraryBox_Legacy {
-  id: string;
-  title: string;
-  description: string;
-  location: {
-    name: string;
-    coordinates?: { latitude: number; longitude: number };
-  };
-  duration: number;
-  category: BoxCategory;
-  tips?: string;
-  estimatedCost?: number;
-  tags?: string[];
-}
-
 export interface Comment {
   id: string;
   postId: string;
