@@ -3,8 +3,8 @@
 App social verticale sui viaggi: gli utenti pubblicano post composti da "box esperienza" salvabili da altri utenti e usano i box salvati per creare itinerari.
 
 ## Stack
-- Expo SDK 54 (`expo ~54.0.33`), React Native 0.81, React 19.1. **Il progetto verrà aggiornato a Expo SDK 57.**
-- expo-router 6 con typed routes (`experiments.typedRoutes` in app.json).
+- Expo SDK 57 (`expo ^57.0.25`), React Native 0.86, React 19.2.
+- expo-router 57 con typed routes (`experiments.typedRoutes` in app.json).
 - Firebase JS SDK 12 (Auth + Firestore), configurato in `config/firebase.ts`.
 - Cloudinary per le immagini (upload unsigned, `services/cloudinary.service.ts`).
 
