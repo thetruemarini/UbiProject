@@ -1,0 +1,178 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────
+    // FUNZIONI DI SUPPORTO
+    // ─────────────────────────────────────────
+
+    // L'utente ha effettuato l'accesso
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // L'utente autenticato è quello indicato
+    function isUser(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // Campi modificati dalla scrittura corrente (aggiunti, rimossi o cambiati)
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Percorso del documento di un post
+    function postPath(postId) {
+      return /databases/$(database)/documents/posts/$(postId);
+    }
+
+    // Percorso del like di un utente su un post
+    function likePath(postId, uid) {
+      return /databases/$(database)/documents/posts/$(postId)/likes/$(uid);
+    }
+
+    // L'utente autenticato è il proprietario del post
+    function isPostOwner(postId) {
+      return isSignedIn()
+        && exists(postPath(postId))
+        && get(postPath(postId)).data.userId == request.auth.uid;
+    }
+
+    // ─────────────────────────────────────────
+    // USERS
+    // ─────────────────────────────────────────
+
+    // users/{uid}: profilo pubblico letto da qualsiasi utente autenticato.
+    // Il documento viene creato alla registrazione dal diretto interessato
+    // con i contatori a zero; poi solo il proprietario può modificarlo,
+    // senza toccare i campi identificativi e i contatori di follow.
+    // postsCount può cambiare solo di ±1 (creazione/eliminazione di un post).
+    match /users/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isUser(uid)
+        && request.resource.data.id == uid
+        && request.resource.data.followersCount == 0
+        && request.resource.data.followingCount == 0
+        && request.resource.data.postsCount == 0;
+
+      allow update: if isUser(uid)
+        && !changedKeys().hasAny(['id', 'email', 'createdAt', 'followersCount', 'followingCount'])
+        && (
+          request.resource.data.postsCount == resource.data.postsCount
+          || request.resource.data.postsCount == resource.data.postsCount + 1
+          || request.resource.data.postsCount == resource.data.postsCount - 1
+        );
+
+      // Nessuna eliminazione del profilo dal client
+      allow delete: if false;
+
+      // users/{uid}/savedBoxes/{boxId}: box salvati, privati del proprietario
+      match /savedBoxes/{boxId} {
+        allow read, write: if isUser(uid);
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // POSTS
+    // ─────────────────────────────────────────
+
+    // posts/{postId}: leggibili da qualsiasi utente autenticato.
+    match /posts/{postId} {
+      allow read: if isSignedIn();
+
+      // Creazione: solo a proprio nome e con i contatori a zero
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.likesCount == 0
+        && request.resource.data.commentsCount == 0
+        && request.resource.data.savesCount == 0;
+
+      // Aggiornamento: tre casi alternativi
+      allow update: if isSignedIn() && (
+        // a) il proprietario modifica solo didascalia, luogo e data di modifica
+        (
+          resource.data.userId == request.auth.uid
+          && changedKeys().hasOnly(['caption', 'location', 'updatedAt'])
+        )
+        // b) like/unlike: likesCount cambia di ±1 solo insieme alla
+        //    creazione/cancellazione del proprio like nella stessa batch
+        || (
+          changedKeys().hasOnly(['likesCount'])
+          && (
+            (
+              request.resource.data.likesCount == resource.data.likesCount + 1
+              && !exists(likePath(postId, request.auth.uid))
+              && existsAfter(likePath(postId, request.auth.uid))
+            )
+            || (
+              request.resource.data.likesCount == resource.data.likesCount - 1
+              && exists(likePath(postId, request.auth.uid))
+              && !existsAfter(likePath(postId, request.auth.uid))
+            )
+          )
+        )
+        // c) nuovo commento: commentsCount aumenta esattamente di 1
+        || (
+          changedKeys().hasOnly(['commentsCount'])
+          && request.resource.data.commentsCount == resource.data.commentsCount + 1
+        )
+      );
+
+      // Eliminazione: solo il proprietario
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+
+      // posts/{postId}/likes/{uid}: un documento per utente che ha messo like.
+      // Ognuno crea/cancella solo il proprio; il proprietario del post
+      // può cancellarli tutti (pulizia quando elimina il post).
+      match /likes/{uid} {
+        allow read: if isSignedIn();
+        allow create: if isUser(uid);
+        allow delete: if isUser(uid) || isPostOwner(postId);
+        allow update: if false;
+      }
+
+      // posts/{postId}/comments/{commentId}: commenti al post.
+      // Si commenta solo a proprio nome con un testo di 1-1000 caratteri;
+      // cancella l'autore del commento o il proprietario del post; niente modifiche.
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+
+        allow create: if isSignedIn()
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() >= 1
+          && request.resource.data.text.size() <= 1000;
+
+        allow delete: if isSignedIn()
+          && (resource.data.userId == request.auth.uid || isPostOwner(postId));
+
+        allow update: if false;
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // ITINERARIES
+    // ─────────────────────────────────────────
+
+    // itineraries/{id}: visibili a tutti se pubblici, altrimenti solo al proprietario.
+    // Solo il proprietario crea, modifica ed elimina; userId non può cambiare.
+    match /itineraries/{itineraryId} {
+      allow read: if resource.data.isPublic == true
+        || (isSignedIn() && resource.data.userId == request.auth.uid);
+
+      allow create: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
+
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    // Tutto il resto è negato per impostazione predefinita
+  }
+}

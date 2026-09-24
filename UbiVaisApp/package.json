@@ -7,7 +7,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "firebase:rules": "firebase deploy --only firestore:rules,firestore:indexes",
+    "firebase:emulators": "firebase emulators:start --only firestore,auth"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",

@@ -4,18 +4,24 @@ import { initializeApp } from 'firebase/app';
 import { initializeAuth } from 'firebase/auth';
 // @ts-expect-error - getReactNativePersistence esiste a runtime ma manca nelle definizioni TypeScript di Firebase 12.x
 import { getReactNativePersistence } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
-// TODO: Sostituisci con le tue credenziali Firebase
-// Le trovi in: Firebase Console → Impostazioni progetto → Le tue app → Config
+// Le variabili EXPO_PUBLIC_* vanno lette con accesso statico (process.env.NOME):
+// Expo le sostituisce nel bundle solo in questa forma
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(`Variabile d'ambiente mancante: ${name}. Aggiungila al file .env (vedi .env.example).`);
+  }
+  return value;
+}
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBDZm1af5FB5SZk95-IWphIIajLv5kBB04",
-  authDomain: "ubivais.firebaseapp.com",
-  projectId: "ubivais",
-  storageBucket: "ubivais.firebasestorage.app",
-  messagingSenderId: "86886992139",
-  appId: "1:86886992139:web:604684af1d7030562f3a0e",
-  measurementId: "G-59DQEQ2MCV"
+  apiKey: requireEnv('EXPO_PUBLIC_FIREBASE_API_KEY', process.env.EXPO_PUBLIC_FIREBASE_API_KEY),
+  authDomain: requireEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN),
+  projectId: requireEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID', process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID),
+  storageBucket: requireEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: requireEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+  appId: requireEnv('EXPO_PUBLIC_FIREBASE_APP_ID', process.env.EXPO_PUBLIC_FIREBASE_APP_ID),
 };
 
 // Inizializza Firebase
@@ -28,7 +34,8 @@ const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(AsyncStorage)
 });
 
-// Inizializza Firestore
-const db = getFirestore(app);
+// Inizializza Firestore ignorando i campi undefined
+// (altrimenti Firestore lancia "Unsupported field value: undefined")
+const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
 
 export { app, auth, db };

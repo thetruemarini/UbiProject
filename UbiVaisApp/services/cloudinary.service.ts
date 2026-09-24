@@ -2,11 +2,19 @@
 import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
+// Le variabili EXPO_PUBLIC_* vanno lette con accesso statico (process.env.NOME):
+// Expo le sostituisce nel bundle solo in questa forma
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(`Variabile d'ambiente mancante: ${name}. Aggiungila al file .env (vedi .env.example).`);
+  }
+  return value;
+}
+
 class CloudinaryService {
-  // Le tue credenziali Cloudinary
-  private cloudName = 'doglcod8f'; // es: 'dxyz123abc'
-  private uploadPreset = 'ubivais_uploads'; 
-  
+  private cloudName = requireEnv('EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME', process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME);
+  private uploadPreset = requireEnv('EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET', process.env.EXPO_PUBLIC_CLOUDINARY_UPLOAD_PRESET);
+
   async requestMediaPermissions() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     return status === 'granted';
