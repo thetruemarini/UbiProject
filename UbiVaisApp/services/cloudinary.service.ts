@@ -1,4 +1,5 @@
 // services/cloudinary.service.ts
+import { File } from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 
 class CloudinaryService {
@@ -44,18 +45,11 @@ class CloudinaryService {
   async uploadFile(uri: string, userId: string) {
     try {
       const formData = new FormData();
-      
-      // Crea oggetto file da URI
-      const filename = uri.split('/').pop() || 'photo.jpg';
-      const match = /\.(\w+)$/.exec(filename);
-      const type = match ? `image/${match[1]}` : 'image/jpeg';
 
-      formData.append('file', {
-        uri,
-        type,
-        name: filename,
-      } as any);
-      
+      // expo/fetch (fetch globale da SDK 56) non accetta { uri, type, name }:
+      // serve un File di expo-file-system (nome e mime type ricavati dal file)
+      formData.append('file', new File(uri));
+
       formData.append('upload_preset', this.uploadPreset);
       formData.append('folder', `ubivais/${userId}`);
 

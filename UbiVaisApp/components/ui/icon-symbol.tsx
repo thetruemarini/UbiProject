@@ -1,5 +1,6 @@
 // components/ui/icon-symbol.tsx
 // Fallback for using MaterialIcons on Android and web.
+// TODO: @expo/vector-icons è deprecato da SDK 56, migrare a @react-native-vector-icons/* (npx @react-native-vector-icons/codemod).
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
