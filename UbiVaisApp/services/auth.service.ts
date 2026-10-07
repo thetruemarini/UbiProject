@@ -1,5 +1,6 @@
 // services/auth.service.ts
 import { auth, db } from '@/config/firebase';
+import { userConverter } from '@/services/firestore-converters';
 import { User } from '@/types';
 import {
   createUserWithEmailAndPassword,
@@ -125,12 +126,8 @@ class AuthService {
   // Get dati utente da Firestore
   async getUserData(userId: string): Promise<User | null> {
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        return data as User;
-      }
-      return null;
+      const userDoc = await getDoc(doc(db, 'users', userId).withConverter(userConverter));
+      return userDoc.exists() ? userDoc.data() : null;
     } catch (error) {
       console.error('Error getting user data:', error);
       return null;

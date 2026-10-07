@@ -1,11 +1,10 @@
 // app/profile/[userId].tsx - Profilo Altri Utenti
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/auth-context';
 import PostService from '@/services/post.service';
+import UserService from '@/services/user.service';
 import { Post, User } from '@/types';
 import { router, useLocalSearchParams } from 'expo-router';
-import { doc, getDoc } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -40,9 +39,9 @@ export default function OtherUserProfileScreen() {
     if (!userId) return;
 
     try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        setProfileUser(userDoc.data() as User);
+      const result = await UserService.getUserById(userId);
+      if (result.success && result.user) {
+        setProfileUser(result.user);
       }
     } catch (error) {
       console.error('Error loading profile:', error);

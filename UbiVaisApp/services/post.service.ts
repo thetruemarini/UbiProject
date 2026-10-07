@@ -1,5 +1,6 @@
 // services/post.service.ts - OPTIMIZED WITH IMAGE COMPRESSION
 import { db } from '@/config/firebase';
+import { postConverter, userConverter } from '@/services/firestore-converters';
 import { ItineraryBox, Post } from '@/types';
 import {
   collection,
@@ -21,7 +22,7 @@ import {
 } from 'firebase/firestore';
 
 class PostService {
-  private postsCollection = collection(db, 'posts');
+  private postsCollection = collection(db, 'posts').withConverter(postConverter);
   private likesCache = new Map<string, boolean>();
 
   // ✅ NUOVO: Helper per ottimizzare URL immagini (Cloudinary)
@@ -45,15 +46,17 @@ class PostService {
     location?: { name: string; coordinates?: { latitude: number; longitude: number } }
   ) {
     try {
-      const postId = doc(this.postsCollection).id;
+      const postRef = doc(this.postsCollection);
+      const postId = postRef.id;
 
       // ✅ Carica dati utente completi
-      const userDoc = await getDoc(doc(db, 'users', userId));
+      const userDoc = await getDoc(doc(db, 'users', userId).withConverter(userConverter));
       const userData = userDoc.exists() ? userDoc.data() : null;
       const username = userData?.username || 'Unknown';
       const userAvatar = userData?.profilePic || undefined;
 
-      const newPost: Partial<Post> = {
+      const newPost: Post = {
+        id: postId,
         userId,
         username,
         userAvatar, // ✅ Salva avatar utente
@@ -74,13 +77,8 @@ class PostService {
         newPost.location = location;
       }
 
-      const postData = {
-        ...newPost,
-        createdAt: Timestamp.fromDate(newPost.createdAt as Date),
-        updatedAt: Timestamp.fromDate(newPost.updatedAt as Date),
-      };
-
-      await setDoc(doc(db, 'posts', postId), postData);
+      // Il converter rimuove l'id e converte le Date in Timestamp
+      await setDoc(postRef, newPost);
 
       await updateDoc(doc(db, 'users', userId), {
         postsCount: increment(1),
@@ -96,17 +94,8 @@ class PostService {
   // Get post singolo
   async getPost(postId: string): Promise<Post | null> {
     try {
-      const postDoc = await getDoc(doc(db, 'posts', postId));
-      if (postDoc.exists()) {
-        const data = postDoc.data();
-        return {
-          id: postDoc.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        } as Post;
-      }
-      return null;
+      const postDoc = await getDoc(doc(this.postsCollection, postId));
+      return postDoc.exists() ? postDoc.data() : null;
     } catch (error) {
       console.error('Error getting post:', error);
       return null;
@@ -127,15 +116,7 @@ class PostService {
       }
 
       const snapshot = await getDocs(q);
-      const posts: Post[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        } as Post;
-      });
+      const posts: Post[] = snapshot.docs.map((doc) => doc.data());
 
       const lastVisible = snapshot.docs[snapshot.docs.length - 1];
 
@@ -156,15 +137,7 @@ class PostService {
       );
 
       const snapshot = await getDocs(q);
-      const posts: Post[] = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        } as Post;
-      });
+      const posts: Post[] = snapshot.docs.map((doc) => doc.data());
 
       return { success: true, posts };
     } catch (error: any) {

@@ -1,5 +1,6 @@
 // services/itinerary.service.ts
 import { db } from '@/config/firebase';
+import { itineraryConverter, savedBoxConverter } from '@/services/firestore-converters';
 import {
   FillerBox,
   Itinerary,
@@ -10,7 +11,6 @@ import {
   SavedBox,
 } from '@/types';
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -25,6 +25,11 @@ import {
 } from 'firebase/firestore';
 
 class ItineraryService {
+  private itinerariesCollection = collection(db, 'itineraries').withConverter(itineraryConverter);
+
+  private savedBoxesCollection(userId: string) {
+    return collection(db, 'users', userId, 'savedBoxes').withConverter(savedBoxConverter);
+  }
 
   // ─────────────────────────────────────────
   // BOX HELPERS
@@ -65,7 +70,6 @@ class ItineraryService {
 
   async saveBox(userId: string, box: ItineraryBox, sourcePostId?: string) {
     try {
-      const savedBoxRef = doc(db, 'users', userId, 'savedBoxes', box.id);
       const savedBox: SavedBox = {
         id: box.id,
         userId,
@@ -73,14 +77,8 @@ class ItineraryService {
         savedAt: new Date(),
         sourcePostId,
       };
-      await setDoc(savedBoxRef, {
-        ...savedBox,
-        savedAt: Timestamp.fromDate(savedBox.savedAt),
-        box: {
-          ...box,
-          createdAt: Timestamp.fromDate(box.createdAt),
-        },
-      });
+      // Il converter converte savedAt e box.createdAt in Timestamp
+      await setDoc(doc(this.savedBoxesCollection(userId), box.id), savedBox);
       return { success: true };
     } catch (error: any) {
       console.error('Error saving box:', error);
@@ -99,19 +97,9 @@ class ItineraryService {
 
   async getSavedBoxes(userId: string): Promise<SavedBox[]> {
     try {
-      const q = query(
-        collection(db, 'users', userId, 'savedBoxes'),
-        orderBy('savedAt', 'desc')
-      );
+      const q = query(this.savedBoxesCollection(userId), orderBy('savedAt', 'desc'));
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          ...data,
-          savedAt: data.savedAt.toDate(),
-          box: { ...data.box, createdAt: data.box.createdAt.toDate() },
-        } as SavedBox;
-      });
+      return snapshot.docs.map((d) => d.data());
     } catch (error) {
       console.error('Error getting saved boxes:', error);
       return [];
@@ -143,7 +131,9 @@ class ItineraryService {
         items: [],
       }));
 
-      const newItinerary: Omit<Itinerary, 'id'> = {
+      const ref = doc(this.itinerariesCollection);
+      const newItinerary: Itinerary = {
+        id: ref.id,
         userId,
         title,
         destination,
@@ -155,11 +145,8 @@ class ItineraryService {
         updatedAt: new Date(),
       };
 
-      const ref = await addDoc(collection(db, 'itineraries'), {
-        ...newItinerary,
-        createdAt: Timestamp.fromDate(newItinerary.createdAt),
-        updatedAt: Timestamp.fromDate(newItinerary.updatedAt),
-      });
+      // Il converter rimuove l'id e converte le Date in Timestamp
+      await setDoc(ref, newItinerary);
 
       return { success: true, itineraryId: ref.id };
     } catch (error: any) {
@@ -171,20 +158,12 @@ class ItineraryService {
   async getUserItineraries(userId: string): Promise<Itinerary[]> {
     try {
       const q = query(
-        collection(db, 'itineraries'),
+        this.itinerariesCollection,
         where('userId', '==', userId),
         orderBy('updatedAt', 'desc')
       );
       const snapshot = await getDocs(q);
-      return snapshot.docs.map((d) => {
-        const data = d.data();
-        return {
-          id: d.id,
-          ...data,
-          createdAt: data.createdAt.toDate(),
-          updatedAt: data.updatedAt.toDate(),
-        } as Itinerary;
-      });
+      return snapshot.docs.map((d) => d.data());
     } catch (error) {
       console.error('Error getting itineraries:', error);
       return [];
@@ -193,15 +172,8 @@ class ItineraryService {
 
   async getItinerary(itineraryId: string): Promise<Itinerary | null> {
     try {
-      const docSnap = await getDoc(doc(db, 'itineraries', itineraryId));
-      if (!docSnap.exists()) return null;
-      const data = docSnap.data();
-      return {
-        id: docSnap.id,
-        ...data,
-        createdAt: data.createdAt.toDate(),
-        updatedAt: data.updatedAt.toDate(),
-      } as Itinerary;
+      const docSnap = await getDoc(doc(this.itinerariesCollection, itineraryId));
+      return docSnap.exists() ? docSnap.data() : null;
     } catch (error) {
       console.error('Error getting itinerary:', error);
       return null;
