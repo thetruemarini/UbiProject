@@ -1,6 +1,6 @@
 // app/(tabs)/create.tsx - CON BOX ESPERIENZE
 import { useAuth } from '@/contexts/auth-context';
-import StorageService from '@/services/cloudinary.service';
+import CloudinaryService from '@/services/cloudinary.service';
 import PostService from '@/services/post.service';
 import { BoxCategory, ItineraryBox } from '@/types';
 import { router } from 'expo-router';
@@ -71,7 +71,7 @@ export default function CreateScreen() {
   const [boxTips, setBoxTips] = useState('');
 
   const handlePickMedia = async () => {
-    const result = await StorageService.pickMedia(true, 'images');
+    const result = await CloudinaryService.pickMedia(true, 'images');
 
     if (result.success && result.assets) {
       setSelectedMedia(result.assets);
@@ -184,7 +184,7 @@ export default function CreateScreen() {
     try {
       console.log('📤 Upload immagini...');
       const uris = selectedMedia.map(media => media.uri);
-      const uploadResult = await StorageService.uploadMultipleFiles(uris, user.id);
+      const uploadResult = await CloudinaryService.uploadMultipleFiles(uris, user.id);
 
       if (!uploadResult.success) {
         Alert.alert('Errore Upload', uploadResult.error || 'Impossibile caricare le immagini');

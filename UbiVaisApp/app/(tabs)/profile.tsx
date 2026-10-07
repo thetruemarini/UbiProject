@@ -1,7 +1,7 @@
 // app/(tabs)/profile.tsx
 import { db } from '@/config/firebase';
 import { useAuth } from '@/contexts/auth-context';
-import StorageService from '@/services/cloudinary.service';
+import CloudinaryService from '@/services/cloudinary.service';
 import PostService from '@/services/post.service';
 import { Post } from '@/types';
 import { router } from 'expo-router';
@@ -111,14 +111,14 @@ export default function ProfileScreen() {
   const handleUploadProfilePic = async () => {
     if (!user) return;
 
-    const result = await StorageService.pickMedia(false, 'images');
+    const result = await CloudinaryService.pickMedia(false, 'images');
     
     if (!result.success || !result.assets) return;
 
     setUploadingPhoto(true);
 
     try {
-      const uploadResult = await StorageService.uploadProfilePicture(
+      const uploadResult = await CloudinaryService.uploadProfilePicture(
         result.assets[0].uri,
         user.id
       );
